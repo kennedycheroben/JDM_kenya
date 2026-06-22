@@ -16,6 +16,7 @@ $error = '';
 $success = '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_csrf();
     if (!empty($_FILES['profile_picture']['name'])) {
         $file = $_FILES['profile_picture'];
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -69,6 +70,7 @@ if ($me['category'] === 'associate') {
 
 // Handle associate update
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['update_associate'])) {
+    require_csrf();
     $graduationYear = trim($_POST['graduation_year'] ?? '');
     $currentProfession = trim($_POST['current_profession'] ?? '');
     if ($graduationYear === '' || $currentProfession === '') {
@@ -151,6 +153,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['update_ass
 
                     <h6 class="mt-3">Upload Profile Picture</h6>
                     <form method="post" enctype="multipart/form-data">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <input type="file" name="profile_picture" class="form-control" accept="image/png,image/jpeg,image/webp" required>
                             <div class="form-text">Max size 4MB. Supported: JPG, PNG, WEBP.</div>
@@ -165,6 +168,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['update_ass
                     <hr>
                     <h6 class="mt-3">Associate Information</h6>
                     <form method="post">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="update_associate" value="1">
                         <div class="mb-3">
                             <label class="form-label">Graduation Year</label>

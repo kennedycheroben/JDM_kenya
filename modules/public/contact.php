@@ -36,10 +36,10 @@ function navActive($page) {
                 <li><a href="activities.php" class="<?= navActive('activities.php') ?>">Activities</a></li>
                 <li><a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
                 <li><a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
-                <?php if ($userRole === 'admin'): ?>
+                <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
                     <li><a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a></li>
                 <?php elseif ($userRole === 'member'): ?>
-                    <li><a href="resources.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
+                    <li><a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
                 <?php else: ?>
                     <li><a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a></li>
                 <?php endif; ?>
@@ -73,7 +73,7 @@ function navActive($page) {
                             <div class="card-body text-center">
                                 <i class="fas fa-map-marker-alt fa-3x text-primary mb-3"></i>
                                 <h5 class="card-title">Visit Us</h5>
-                                <p class="card-text">Nairobi, Kenya<br>Weekly Services: Sundays at 10 AM</p>
+                                <p class="card-text">Lower Kabete, Nairobi Kenya<br>Weekly Services: Sundays at 9 AM</p>
                             </div>
                         </div>
                     </div>
@@ -82,7 +82,7 @@ function navActive($page) {
                             <div class="card-body text-center">
                                 <i class="fas fa-envelope fa-3x text-primary mb-3"></i>
                                 <h5 class="card-title">Email Us</h5>
-                                <p class="card-text">info@jdmkenya.org<br>prayer@jdmkenya.org</p>
+                                <p class="card-text">jesusdisciplemovementk@gmail.com<br>support@jdmkenya.com</p>
                             </div>
                         </div>
                     </div>
@@ -91,7 +91,7 @@ function navActive($page) {
                             <div class="card-body text-center">
                                 <i class="fas fa-phone fa-3x text-primary mb-3"></i>
                                 <h5 class="card-title">Call Us</h5>
-                                <p class="card-text">+254 700 123 456<br>Mon-Fri, 9 AM - 5 PM</p>
+                                <p class="card-text">0731 243 053<br>Mon-Fri, 9 AM - 5 PM</p>
                             </div>
                         </div>
                     </div>
@@ -100,7 +100,7 @@ function navActive($page) {
                             <div class="card-body text-center">
                                 <i class="fas fa-praying-hands fa-3x text-primary mb-3"></i>
                                 <h5 class="card-title">Prayer Requests</h5>
-                                <p class="card-text">Submit your prayer needs and our team will pray for you.</p>
+                                <p class="card-text">Submit your prayer request and we will pray together.</p>
                             </div>
                         </div>
                     </div>
@@ -113,7 +113,8 @@ function navActive($page) {
                         <?php elseif (isset($_GET['error'])): ?>
                             <div class="alert alert-danger">Please fill in all fields correctly.</div>
                         <?php endif; ?>
-                        <form method="post" action="contact_process.php">
+                       <form method="post" action="/JDM_kenya/contact_process.php">
+                            <?= csrf_field() ?>
                             <div class="row gy-3">
                                 <div class="col-md-6">
                                     <label class="form-label">Full Name</label>
@@ -146,6 +147,11 @@ function navActive($page) {
     <div class="container text-center">
         <p class="mb-1">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
         <p class="text-muted mb-0">Building a discipleship movement with faith, clarity, and service.</p>
+        <div class="d-flex justify-content-center gap-3 mt-3">
+            <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="text-secondary hover-text-primary" title="Facebook"><i class="bi bi-facebook fs-5"></i></a>
+            <a href="#" target="_blank" class="text-secondary hover-text-danger" title="Instagram"><i class="bi bi-instagram fs-5"></i></a>
+            <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="text-secondary hover-text-dark" title="TikTok"><i class="bi bi-tiktok fs-5"></i></a>
+        </div>
     </div>
 </footer>
 <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>

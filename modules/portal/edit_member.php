@@ -26,16 +26,16 @@ if (!$u) {
 $isOwnProfile = ($viewerId === $id);
 $canEdit = false;
 
-if ($isOwnProfile) {
+if ($viewerRole === 'super_admin') {
+    // JDM Leader / super admin cannot edit any profile
+    header('Location: view_members.php');
+    exit;
+} elseif ($isOwnProfile) {
     // Users can edit their own profile
     $canEdit = true;
-} elseif ($viewerRole === 'admin' || $viewerRole === 'super_admin') {
-    // Admins can edit basic info but not other admins/super_admins. Super admins can edit admins/members but not other super admins.
-    if ($u['role'] === 'super_admin') {
-        header('Location: view_members.php');
-        exit;
-    }
-    if ($u['role'] === 'admin' && $viewerRole === 'admin') {
+} elseif ($viewerRole === 'admin') {
+    // Admins can edit members but not other admins, super_admins, or office bearers (partners)
+    if ($u['role'] === 'super_admin' || $u['role'] === 'admin' || $u['category'] === 'partner') {
         header('Location: view_members.php');
         exit;
     }
@@ -50,6 +50,7 @@ $error = '';
 $success = '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_csrf();
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $whatsapp = trim($_POST['whatsapp_phone'] ?? '');
@@ -85,7 +86,7 @@ ob_start();
     <div class="col-12 d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div>
             <h2><i class="bi bi-pencil"></i> Edit Member</h2>
-            <p class="text-muted mb-0">Admins can edit members. Only Super Admin can manage admins.</p>
+            <p class="text-muted mb-0">Admins can edit members. Only JDM Leader can manage admins.</p>
         </div>
         <div class="d-flex gap-2">
             <a href="view_member.php?id=<?= (int)$u['id'] ?>" class="btn btn-secondary">Back</a>
@@ -105,6 +106,7 @@ ob_start();
     </div>
     <div class="card-body">
         <form method="post" class="row g-3">
+            <?= csrf_field() ?>
             <div class="col-12 col-md-6">
                 <label class="form-label">Full Name</label>
                 <input class="form-control" name="name" value="<?= escape($u['name']) ?>" required>
@@ -122,7 +124,7 @@ ob_start();
                 <select class="form-select" name="category" required>
                     <option value="student" <?= $u['category']==='student'?'selected':'' ?>>Student</option>
                     <option value="associate" <?= $u['category']==='associate'?'selected':'' ?>>Associate</option>
-                    <option value="partner" <?= $u['category']==='partner'?'selected':'' ?>>Partner</option>
+                    <option value="partner" <?= $u['category']==='partner'?'selected':'' ?>>Office Bearer</option>
                 </select>
             </div>
             <div class="col-12">

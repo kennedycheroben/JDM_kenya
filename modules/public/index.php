@@ -19,7 +19,7 @@ function navActive($page) {
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css">
+    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/JDM_kenya/assets/css/style.css') ?>">
     <link rel="icon" type="image/png" href="/JDM_kenya/images/jdm_logo.png">
 </head>
 <body>
@@ -36,10 +36,10 @@ function navActive($page) {
                 <li><a href="activities.php" class="<?= navActive('activities.php') ?>">Activities</a></li>
                 <li><a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
                 <li><a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
-                <?php if ($userRole === 'admin'): ?>
+                <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
                     <li><a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a></li>
                 <?php elseif ($userRole === 'member'): ?>
-                    <li><a href="resources.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
+                    <li><a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
                 <?php else: ?>
                     <li><a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a></li>
                 <?php endif; ?>
@@ -55,7 +55,7 @@ function navActive($page) {
             <div class="row h-100 align-items-center">
                 <div class="col-lg-5 ps-lg-5 text-white z-1">
                     <h1 class="hero-title display-3 fw-bold mb-4 animated-title">
-                        Jesus Disciple<br>Movement Kenya
+                        Jesus Disciple<br>Movement of Kenya
                     </h1>
                     
                     <p class="hero-subtitle lead mb-5 animated-subtitle">
@@ -63,17 +63,14 @@ function navActive($page) {
                     </p>
 
                     <div class="social-links d-flex gap-3 mt-5">
-                        <a href="https://twitter.com" target="_blank" class="social-icon" title="X (Twitter)">
-                            <i class="bi bi-twitter"></i>
-                        </a>
-                        <a href="https://facebook.com" target="_blank" class="social-icon" title="Facebook">
+                        <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="social-icon btn-neon" title="Facebook">
                             <i class="bi bi-facebook"></i>
                         </a>
-                        <a href="https://instagram.com" target="_blank" class="social-icon" title="Instagram">
+                        <a href="#" target="_blank" class="social-icon btn-neon" title="Instagram">
                             <i class="bi bi-instagram"></i>
                         </a>
-                        <a href="https://linkedin.com" target="_blank" class="social-icon" title="LinkedIn">
-                            <i class="bi bi-linkedin"></i>
+                        <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="social-icon btn-neon" title="TikTok">
+                            <i class="bi bi-tiktok"></i>
                         </a>
                     </div>
                 </div>
@@ -91,7 +88,7 @@ function navActive($page) {
 <footer class="footer bg-dark text-white border-top">
     <div class="container text-center py-4">
         <p class="mb-1">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
-        <p class="text-muted mb-0">Building a discipleship movement with faith, clarity, and service.</p>
+        <p class="text-muted mb-0">Go and make Discuples of all nations</p>
     </div>
 </footer>
 

@@ -10,6 +10,7 @@
  */
 
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 // --- Auth Check ---
 if (empty($_SESSION['user_role'])) {
@@ -26,14 +27,20 @@ if ($gbs_id <= 0) {
     exit;
 }
 
-// --- Permission Check: Only GBS Leaders ---
-$stmt = $pdo->prepare("
-    SELECT gm.role, g.name, g.leader_id
-    FROM gbs_members gm
-    JOIN gbs_groups g ON gm.gbs_id = g.id
-    WHERE gm.gbs_id = ? AND gm.user_id = ? AND gm.role = 'leader'
-");
-$stmt->execute([$gbs_id, $user_id]);
+// --- Permission Check: GBS Leaders manage their own group; JDM Leader can manage any group ---
+$is_super_admin = ($user_role === 'super_admin');
+if ($is_super_admin) {
+    $stmt = $pdo->prepare("SELECT 'leader' AS role, name, leader_id FROM gbs_groups WHERE id = ? LIMIT 1");
+    $stmt->execute([$gbs_id]);
+} else {
+    $stmt = $pdo->prepare("
+        SELECT gm.role, g.name, g.leader_id
+        FROM gbs_members gm
+        JOIN gbs_groups g ON gm.gbs_id = g.id
+        WHERE gm.gbs_id = ? AND gm.user_id = ? AND gm.role = 'leader'
+    ");
+    $stmt->execute([$gbs_id, $user_id]);
+}
 $leadership = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$leadership) {
@@ -47,6 +54,7 @@ $message = '';
 $error = '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_csrf();
     $action = $_POST['action'] ?? '';
     try {
         switch ($action) {
@@ -162,8 +170,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $stmt->execute([$restricted, $gbs_id]);
                 $message = $restricted ? 'Chat restricted to leader only.' : 'Chat opened for all members.';
                 break;
+
+            case 'delete_gbs_group':
+                if (!$is_super_admin && (int)$leadership['leader_id'] !== $user_id) {
+                    $error = 'You can only delete GBS groups you own.';
+                    break;
+                }
+
+                deleteGbsGroup($pdo, $gbs_id);
+                header('Location: gbs_dashboard.php?message=' . urlencode('GBS group deleted successfully.'));
+                exit;
         }
-    } catch (PDOException $e) {
+    } catch (Throwable $e) {
         $error = 'Operation failed: ' . $e->getMessage();
     }
 }

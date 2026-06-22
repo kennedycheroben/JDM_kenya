@@ -1,0 +1,384 @@
+/* Consolidated styles for all About pages (extracted from inline <style> blocks) */
+/* Namespace: about pages only */
+
+/* Nav pills generic active / hover (non-neon links only) */
+.nav-pills .nav-link:not(.about-nav-link) {
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  transition: all 0.35s ease !important;
+}
+.nav-pills .nav-link.active:not(.about-nav-link) {
+  background-color: #a8ff00 !important;
+  color: #000 !important;
+  box-shadow: 0 0 6px #a8ff00, 0 0 20px #a8ff00;
+}
+.nav-pills .nav-link:hover:not(.active):not(.about-nav-link) {
+  background-color: rgba(168, 255, 0, 0.12) !important;
+  color: #a8ff00 !important;
+}
+
+/* Generic hover card used across about pages */
+.hover-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 12px;
+}
+.hover-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(16, 42, 84, 0.1) !important;
+}
+
+/* Timeline (History & Spirit) */
+.timeline {
+  position: relative;
+  padding: 20px 0;
+  list-style: none;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 40px;
+  width: 3px;
+  background: #e9ecef;
+}
+.timeline-item { margin-bottom: 25px; }
+.timeline-item::after { content: ""; display: table; clear: both; }
+.timeline-badge {
+  position: absolute;
+  top: 5px;
+  left: 20px;
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  text-align: center;
+  background-color: #102a54;
+  color: #fff;
+  border-radius: 50%;
+  font-weight: bold;
+  z-index: 10;
+  box-shadow: 0 0 10px rgba(16, 42, 84, 0.15);
+}
+.timeline-panel {
+  position: relative;
+  width: calc(100% - 85px);
+  float: right;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  transition: transform 0.3s ease;
+}
+.timeline-panel:hover { transform: translateX(5px); box-shadow: 0 6px 20px rgba(0,0,0,0.05); }
+.timeline-panel::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: -11px;
+  border-top: 11px solid transparent;
+  border-right: 11px solid #dee2e6;
+  border-bottom: 11px solid transparent;
+}
+.timeline-panel::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: -10px;
+  border-top: 10px solid transparent;
+  border-right: 10px solid #fff;
+  border-bottom: 10px solid transparent;
+}
+
+/* Spirit cards */
+.spirit-card {
+  border-radius: 12px;
+  border: none;
+  background: #fff;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.03);
+  height: 100%;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+.spirit-card:hover { transform: translateY(-5px); box-shadow: 0 12px 30px rgba(16, 42, 84, 0.08); }
+.spirit-header-1 { border-top: 5px solid #dc3545; }
+.spirit-header-2 { border-top: 5px solid #6f42c1; }
+.spirit-header-3 { border-top: 5px solid #0d6efd; }
+.spirit-header-4 { border-top: 5px solid #198754; }
+.spirit-header-5 { border-top: 5px solid #fd7e14; }
+.quote-box { font-style: italic; border-left: 3px solid #d4af37; padding-left: 15px; margin: 15px 0; color: #5c636a; }
+.scripture-ref { font-weight: 600; font-size: 0.85rem; color: #102a54; }
+
+/* Vision / Ministry styles */
+.vision-card {
+  background: linear-gradient(135deg, #102a54 0%, #1a3e75 100%);
+  color: #fff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(16, 42, 84, 0.15);
+  border: none;
+  overflow: hidden;
+  position: relative;
+}
+.vision-card::after { content: ""; position: absolute; bottom: -50px; right: -50px; width: 200px; height: 200px; background: rgba(212, 175, 55, 0.08); border-radius: 50%; }
+.principle-card { border-radius: 12px; border: none; box-shadow: 0 5px 20px rgba(0,0,0,0.05); transition: transform 0.3s ease, box-shadow 0.3s ease; }
+.principle-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+.char-card { border-radius: 12px; border-left: 5px solid #027920; box-shadow: 0 5px 15px rgba(0,0,0,0.03); }
+.ministry-card { border-radius: 10px; border: 1px solid rgba(16, 42, 84, 0.08); background: #fff; transition: all 0.3s ease; }
+.ministry-card:hover { border-color: #d4af37; background: rgba(212, 175, 55, 0.02); transform: translateY(-3px); box-shadow: 0 5px 15px rgba(212, 175, 55, 0.1); }
+.tab-btn {
+    font-weight: 600;
+    border-radius: 20px !important;
+    padding: 8px 20px !important;
+    border: 2px solid #a8ff00 !important;
+    color: #a8ff00 !important;
+    background: transparent !important;
+    transition: all 0.35s ease !important;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+.tab-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: #a8ff00;
+    z-index: -1;
+    transition: left 0.4s ease;
+    border-radius: inherit;
+}
+.tab-btn:hover {
+    color: #000 !important;
+    box-shadow: 0 0 6px #0023b0, 0 0 20px #021c7a;
+    transform: translateY(-2px);
+}
+.tab-btn:hover::before {
+    left: 0;
+}
+.tab-btn.active {
+    background: #a8ff00 !important;
+    color: #000 !important;
+    border-color: #a8ff00 !important;
+    box-shadow: 0 0 8px #a8ff00, 0 0 25px #a8ff00;
+}
+
+/* Cross / Cross-diagram (Inner & Outer features) */
+.cross-diagram-container { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 15px; max-width: 500px; margin: 0 auto; position: relative; }
+.cross-node {
+  background: #fff;
+  border: 2px solid rgba(16, 42, 84, 0.08);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 15px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+  position: relative;
+  overflow: hidden;
+}
+/* Blue neon slide-in fill for outer nodes */
+.cross-node::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #00b4ff;
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity 0.35s ease;
+  z-index: 0;
+}
+.cross-node > * { position: relative; z-index: 1; }
+.cross-node:hover {
+  border-color: #00b4ff;
+  transform: scale(1.07) translateY(-3px);
+  box-shadow: 0 0 8px #00b4ff, 0 0 20px #00b4ff, 0 0 40px rgba(0,180,255,0.35);
+  color: #fff;
+}
+.cross-node:hover::before { opacity: 1; }
+
+/* Center node – gold identity kept, blue glow ring added on hover */
+.cross-node.node-center {
+  grid-column: 2;
+  grid-row: 2;
+  background: #102a54;
+  color: #fff;
+  border-color: #d4af37;
+  box-shadow: 0 0 20px rgba(16, 42, 84, 0.2);
+}
+.cross-node.node-center::before { background: #1a3e75; opacity: 0; }
+.cross-node.node-center:hover {
+  border-color: #00b4ff;
+  box-shadow: 0 0 10px #00b4ff, 0 0 30px rgba(0,180,255,0.5), 0 0 5px #d4af37;
+  transform: scale(1.08) translateY(-3px);
+  color: #fff;
+}
+.cross-node.node-center:hover::before { opacity: 1; }
+
+.cross-node.node-top { grid-column: 2; grid-row: 1; }
+.cross-node.node-bottom { grid-column: 2; grid-row: 3; }
+.cross-node.node-left { grid-column: 1; grid-row: 2; }
+.cross-node.node-right { grid-column: 3; grid-row: 2; }
+.diagram-connector-v { position: absolute; width: 4px; background: rgba(16, 42, 84, 0.1); left: 50%; transform: translateX(-50%); z-index: 1; }
+.diagram-connector-h { position: absolute; height: 4px; background: rgba(16, 42, 84, 0.1); top: 50%; transform: translateY(-50%); z-index: 1; }
+
+.detail-card { border-radius: 16px; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.03); background: #fff; transition: all 0.3s ease; }
+.detail-card.active-highlight { border-left: 6px solid #00b4ff !important; background: rgba(0,180,255,0.03); box-shadow: 0 8px 25px rgba(0,180,255,0.12); }
+.scripture-highlight { background-color: #f8f9fa; border-left: 3px solid #102a54; padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 0.9rem; }
+
+/* Utilities & page-specific helpers */
+.logo-img { height: 40px; width: auto; }
+.about-main { padding-top: 20px; padding-bottom: 60px; }
+.about-main.tall { padding-top: 40px; }
+.page-hero.about-hero { background: linear-gradient(135deg, rgba(16,42,84,0.85) 0%, rgba(18,35,65,0.75) 100%), url('/JDM_kenya/images/hero-bg.jpeg') center/cover no-repeat fixed; height: 35vh; }
+.page-hero.about-hero.tall { height: 40vh; }
+.page-hero.about-hero .display-5, .page-hero.about-hero .display-4 { text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+.page-hero.about-hero .lead { text-shadow: 1px 1px 2px rgba(0,0,0,0.3); }
+
+/* Color helpers used by a few inline elements */
+.text-purple { color: #6f42c1 !important; }
+.bg-purple { background-color: #6f42c1 !important; }
+.text-orange { color: #fd7e14 !important; }
+.text-green { color: #20c997 !important; }
+.text-gold { color: #d4af37 !important; }
+.border-left-gold { border-left-color: #d4af37 !important; }
+.border-left-navy { border-left-color: #102a54 !important; }
+.border-left-purple { border-left-color: #6f42c1 !important; }
+.border-left-orange { border-left-color: #fd7e14 !important; }
+.border-left-green { border-left-color: #20c997 !important; }
+.border-left-dark { border-left-color: #343a40 !important; }
+
+/* small helpers */
+.center-logo { width: 36px; height: 36px; }
+
+/* small responsive tweaks */
+@media (max-width: 767px) {
+  .cross-diagram-container { max-width: 100%; }
+  .page-hero.about-hero { background-attachment: scroll; }
+}
+
+/* ── About sub-navigation: full neon override (electric blue) ── */
+
+/* Layout & visibility */
+.nav.nav-pills .about-nav-link.btn-neon {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: inline-flex !important;
+  align-items: center !important;
+
+  /* Electric blue neon colours */
+  color: #00b4ff !important;
+  border: 2px solid #00b4ff !important;
+  background: transparent !important;
+  box-shadow: none !important;
+
+  padding: 8px 18px !important;
+  border-radius: 24px !important;
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px;
+  position: relative;
+  overflow: hidden !important;
+  z-index: 1;
+  transition: color 0.45s ease, box-shadow 0.45s ease, letter-spacing 0.45s ease !important;
+}
+
+/* Slide-in fill pseudo-element */
+.nav.nav-pills .about-nav-link.btn-neon::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: -100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: #00b4ff !important;
+  z-index: -1 !important;
+  box-shadow: 0 0 50px #00b4ff, 0 0 50px #00b4ff inset !important;
+  transition: left 0.5s cubic-bezier(.2,.8,.2,1) !important;
+  border-radius: inherit !important;
+}
+
+/* Hover state */
+.nav.nav-pills .about-nav-link.btn-neon:hover {
+  color: #fff !important;
+  letter-spacing: 2px !important;
+  border-radius: 10px !important;
+  box-shadow: 0 0 8px #00b4ff, 0 0 10px #00b4ff, 0 0 10px #00b4ff !important;
+  transform: translateY(-2px);
+  background: transparent !important;
+}
+.nav.nav-pills .about-nav-link.btn-neon:hover::before {
+  left: 0 !important;
+}
+
+/* Active / current page state */
+.nav.nav-pills .about-nav-link.btn-neon.active {
+  color: #fff !important;
+  background: #00b4ff !important;
+  border-color: #00b4ff !important;
+  border-radius: 10px !important;
+  box-shadow: 0 0 8px #00b4ff, 0 0 8px #00b4ff, 0 0 8px #00b4ff !important;
+}
+.nav.nav-pills .about-nav-link.btn-neon.active::before {
+  left: 0 !important;
+}
+
+/* Container-scoped flex layout */
+.about-history-spirit-container .nav.nav-pills {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.5rem !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  position: relative !important;
+  z-index: 1050 !important;
+}
+.about-history-spirit-container .nav.nav-pills .nav-item {
+  display: inline-block !important;
+}
+
+/* 1. Limit the scope and hide anything that goes past the card edges */
+.custom-marquee-container {
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+  display: block;
+}
+
+/* 2. Target the h5 heading to apply the smooth layout and animation */
+.custom-marquee-content {
+  display: inline-block;
+  padding-left: 100%; /* Starts the text completely off-screen to the right */
+  animation: dynamicMarquee 12s linear infinite;
+}
+
+/* 3. Pause behavior on hover for better user experience */
+.custom-marquee-container:hover .custom-marquee-content {
+  animation-play-state: paused;
+}
+
+/* 4. Define the behavioral movement */
+@keyframes dynamicMarquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-100%, 0, 0); /* Moves completely off-screen to the left */
+  }
+}
+
+/* 5. Accessibility override for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .custom-marquee-content {
+    animation: none;
+    padding-left: 0;
+    white-space: normal;
+  }
+}

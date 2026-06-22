@@ -1,8 +1,26 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
 
-// Check admin access
-if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'super_admin')) {
+// =====================================================================
+// ACCESS CONTROL: Allow admins, super_admins, and approved office bearers
+// =====================================================================
+$viewerRole = $_SESSION['user_role'] ?? '';
+$viewerId = (int)($_SESSION['user_id'] ?? 0);
+
+// Check if user is admin or super_admin
+$isAdmin = ($viewerRole === 'admin' || $viewerRole === 'super_admin');
+
+// Check if user is an approved office bearer (partner)
+$isOfficeBearer = false;
+if (!$isAdmin && $viewerId > 0) {
+    $stmtViewer = $pdo->prepare('SELECT category, is_approved FROM users WHERE id = ? AND category = "partner" LIMIT 1');
+    $stmtViewer->execute([$viewerId]);
+    $viewerData = $stmtViewer->fetch(PDO::FETCH_ASSOC);
+    $isOfficeBearer = ($viewerData && $viewerData['is_approved']);
+}
+
+// Only admins, super_admins, and approved office bearers can view members
+if (!$isAdmin && !$isOfficeBearer) {
     header('Location: login.php');
     exit;
 }
@@ -10,15 +28,35 @@ if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'admin' && $_SE
 $page_title = "Members Management - JDM Kenya";
 $success_msg = '';
 $error_msg = '';
+
+// Flash messages from actions
+if (!empty($_GET['deleted'])) {
+    $success_msg = 'Member deleted successfully.';
+} elseif (!empty($_GET['error'])) {
+    $errorCode = $_GET['error'];
+    if ($errorCode === 'cannot_delete_self') {
+        $error_msg = 'You cannot delete your own account.';
+    } elseif ($errorCode === 'protected') {
+        $error_msg = 'That account is protected and cannot be deleted.';
+    } else {
+        $error_msg = 'An error occurred while processing the request.';
+    }
+}
 $selected_category = isset($_GET['category']) ? $_GET['category'] : 'all';
 
-// Get all members (admins can manage members only; super admins can view all)
+// Get all members (admins can manage members only; JDM Leaders can view all)
 $is_super_admin = ($_SESSION['user_role'] === 'super_admin');
+
+if ($selected_category === 'partner' && !$is_super_admin) {
+    header('Location: view_members.php');
+    exit;
+}
+
 $query = 'SELECT id, name, email, whatsapp_phone, category, role, created_at FROM users WHERE 1=1';
 $params = [];
 
 if (!$is_super_admin) {
-    $query .= " AND role = 'member'";
+    $query .= " AND role = 'member' AND category != 'partner'";
 }
 
 if ($selected_category !== 'all') {
@@ -32,13 +70,23 @@ $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get category statistics (members only)
-$stats = [
-    'students' => $pdo->query("SELECT COUNT(*) as count FROM users WHERE role = 'member' AND category = 'student'")->fetch(PDO::FETCH_ASSOC)['count'],
-    'associates' => $pdo->query("SELECT COUNT(*) as count FROM users WHERE role = 'member' AND category = 'associate'")->fetch(PDO::FETCH_ASSOC)['count'],
-    'partners' => $pdo->query("SELECT COUNT(*) as count FROM users WHERE role = 'member' AND category = 'partner'")->fetch(PDO::FETCH_ASSOC)['count'],
-    'total' => $pdo->query("SELECT COUNT(*) as count FROM users WHERE role = 'member'")->fetch(PDO::FETCH_ASSOC)['count'],
-];
+// Get category statistics (members only, adjusted by role permissions)
+$stats = ['students' => 0, 'associates' => 0, 'partners' => 0, 'total' => 0];
+try {
+    if ($is_super_admin) {
+        $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
+        $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
+        $stats['partners'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='partner'")->fetch(PDO::FETCH_ASSOC)['c'];
+        $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member'")->fetch(PDO::FETCH_ASSOC)['c'];
+    } else {
+        $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
+        $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
+        $stats['partners'] = 0;
+        $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category!='partner'")->fetch(PDO::FETCH_ASSOC)['c'];
+    }
+} catch (Throwable $e) {
+    error_log("Stats query error: " . $e->getMessage());
+}
 
 // Start output buffering
 ob_start();
@@ -78,14 +126,16 @@ ob_start();
             <p>Associate members</p>
         </div>
     </div>
+    <?php if ($is_super_admin): ?>
     <div class="col-md-3 mb-3">
         <div class="card stat-card">
-            <i class="bi bi-handshake text-warning"></i>
-            <h5>Partners</h5>
+            <i class="bi bi-briefcase-fill text-warning"></i>
+            <h5>Office Bearers</h5>
             <h3 class="text-warning"><?= $stats['partners'] ?></h3>
-            <p>Partner members</p>
+            <p>Office Bearer members</p>
         </div>
     </div>
+    <?php endif; ?>
 </div>
 
 <!-- Category Filter -->
@@ -102,8 +152,13 @@ ob_start();
             <a href="view_members.php?category=associate" class="category-btn <?= $selected_category === 'associate' ? 'active' : '' ?>">
                 <i class="bi bi-briefcase"></i> Associates
             </a>
+            <?php if ($is_super_admin): ?>
             <a href="view_members.php?category=partner" class="category-btn <?= $selected_category === 'partner' ? 'active' : '' ?>">
-                <i class="bi bi-handshake"></i> Partners
+                <i class="bi bi-briefcase-fill"></i> Office Bearers
+            </a>
+            <?php endif; ?>
+            <a href="view_members.php?category=other" class="category-btn <?= $selected_category === 'other' ? 'active' : '' ?>">
+                <i class="bi bi-person"></i> Others
             </a>
         </div>
     </div>
@@ -161,25 +216,22 @@ ob_start();
                                         <td><strong>#<?= $member['id'] ?></strong></td>
                                         <td><?= escape($member['name']) ?></td>
                                         <td><?= escape($member['email']) ?></td>
-                                        <td><?= escape($member['whatsapp_phone']) ?></td>
+                                        <?php 
+                                        $can_view_phone = $isAdmin || (!empty($_SESSION['is_gbs_leader']));
+                                        ?>
+                                        <td><?= $can_view_phone ? escape($member['whatsapp_phone']) : escape(maskPhone($member['whatsapp_phone'] ?? '')) ?></td>
                                         <td>
                                             <?php 
-                                            $badge_class = match($member['category']) {
-                                                'student' => 'bg-info',
-                                                'associate' => 'bg-success',
-                                                'partner' => 'bg-warning text-dark',
-                                                default => 'bg-secondary'
+                                            $badgeDisplay = match($member['category']) {
+                                                'student' => ['class' => 'bg-info', 'icon' => '<i class="bi bi-book"></i> Student'],
+                                                'associate' => ['class' => 'bg-success', 'icon' => '<i class="bi bi-briefcase"></i> Associate'],
+                                                'partner' => ['class' => 'bg-warning text-dark', 'icon' => '<i class="bi bi-briefcase-fill"></i> Office Bearer'],
+                                                'other' => ['class' => 'bg-secondary', 'icon' => 'Member'],
+                                                default => ['class' => 'bg-secondary', 'icon' => 'Member']
                                             };
                                             ?>
-                                            <span class="badge <?= $badge_class ?>">
-                                                <?php 
-                                                echo match($member['category']) {
-                                                    'student' => '<i class="bi bi-book"></i> Student',
-                                                    'associate' => '<i class="bi bi-briefcase"></i> Associate',
-                                                    'partner' => '<i class="bi bi-handshake"></i> Partner',
-                                                    default => htmlspecialchars($member['category'])
-                                                };
-                                                ?>
+                                            <span class="badge <?= $badgeDisplay['class'] ?>">
+                                                <?= $badgeDisplay['icon'] ?>
                                             </span>
                                         </td>
                                         <td><?= date('M d, Y', strtotime($member['created_at'])) ?></td>
@@ -195,15 +247,14 @@ ob_start();
                                             <span class="badge <?= $rb ?>"><?= escape($r) ?></span>
                                         </td>
                                         <td>
-                                            <a href="view_member.php?id=<?= $member['id'] ?>" class="btn btn-sm btn-primary">
-                                                <i class="bi bi-eye"></i> View
-                                            </a>
-                                            <a href="edit_member.php?id=<?= $member['id'] ?>" class="btn btn-sm btn-outline-primary">
-                                                <i class="bi bi-pencil"></i> Edit
-                                            </a>
-                                            <a href="delete_member.php?id=<?= $member['id'] ?>" class="btn btn-sm btn-outline-danger">
-                                                <i class="bi bi-trash"></i> Delete
-                                            </a>
+                                                <a href="view_member.php?id=<?= $member['id'] ?>" class="btn btn-sm btn-primary">
+                                                    <i class="bi bi-eye"></i> View
+                                                </a>
+                                                <?php if ($is_super_admin): ?>
+                                                    <a href="delete_member.php?id=<?= $member['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this user? This cannot be undone.');">
+                                                        <i class="bi bi-trash"></i> Delete
+                                                    </a>
+                                                <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

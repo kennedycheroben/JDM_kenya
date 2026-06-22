@@ -6,6 +6,7 @@
  */
 
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 if (empty($_SESSION['user_role'])) {
     header('Location: login.php');
@@ -20,6 +21,7 @@ $message = '';
 $error = '';
 $my_leaderships = [];
 $my_memberships = [];
+$all_groups = [];
 $all_users = [];
 
 try {
@@ -44,6 +46,17 @@ try {
     ");
     $stmt->execute([$user_id]);
     $my_memberships = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if ($user_role === 'super_admin') {
+        $stmt = $pdo->query("
+            SELECT g.*, u.name AS leader_name,
+                   (SELECT COUNT(*) FROM gbs_members WHERE gbs_id = g.id) AS member_count
+            FROM gbs_groups g
+            LEFT JOIN users u ON u.id = g.leader_id
+            ORDER BY g.created_at DESC
+        ");
+        $all_groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 } catch (PDOException $e) {
     $error = 'Unable to load GBS groups: ' . $e->getMessage();
 }
@@ -58,7 +71,40 @@ try {
 
 $can_create_group = in_array($user_role, ['admin', 'super_admin'], true) || $is_gbs_leader_db;
 
-if ($can_create_group && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
+if (isset($_GET['message'])) {
+    $message = trim($_GET['message']);
+}
+
+if ((($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') && ($_POST['action'] ?? '') === 'delete_gbs_group') {
+    require_csrf();
+    $delete_gbs_id = (int)($_POST['gbs_id'] ?? 0);
+    $can_delete = false;
+
+    if ($delete_gbs_id > 0) {
+        if ($user_role === 'super_admin') {
+            $can_delete = true;
+        } else {
+            $stmt = $pdo->prepare('SELECT COUNT(*) FROM gbs_groups WHERE id = ? AND leader_id = ?');
+            $stmt->execute([$delete_gbs_id, $user_id]);
+            $can_delete = ((int)$stmt->fetchColumn() > 0);
+        }
+    }
+
+    if (!$can_delete) {
+        $error = 'You can only delete GBS groups you lead.';
+    } else {
+        try {
+            deleteGbsGroup($pdo, $delete_gbs_id);
+            header('Location: gbs_dashboard.php?message=' . urlencode('GBS group deleted successfully.'));
+            exit;
+        } catch (Throwable $e) {
+            $error = 'Failed to delete GBS group: ' . $e->getMessage();
+        }
+    }
+}
+
+if ($can_create_group && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') && ($_POST['action'] ?? 'create_gbs_group') !== 'delete_gbs_group') {
+    require_csrf();
     $group_name = trim($_POST['group_name'] ?? '');
     $group_slogan = trim($_POST['group_slogan'] ?? '');
     $leader_id = (int)($_POST['leader_id'] ?? 0);
@@ -187,6 +233,8 @@ if (isset($_GET['new_leader']) && $is_link_valid):
         </div>
         <div class="card-body">
             <form method="post" enctype="multipart/form-data" class="row g-3">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="create_gbs_group">
                 <div class="col-md-4">
                     <label class="form-label">Group Name</label>
                     <input type="text" name="group_name" class="form-control" required>
@@ -250,9 +298,19 @@ if (isset($_GET['new_leader']) && $is_link_valid):
                                         <div class="text-muted small"><?= escape($group['slogan'] ?? 'No slogan') ?></div>
                                         <span class="badge bg-light text-dark border mt-2"><?= (int)$group['member_count'] ?> members</span>
                                     </div>
-                                    <a href="gbs_group.php?id=<?= (int)$group['id'] ?>" class="btn btn-sm btn-primary">
-                                        Open
-                                    </a>
+                                    <div class="d-flex gap-2">
+                                        <a href="gbs_group.php?id=<?= (int)$group['id'] ?>" class="btn btn-sm btn-primary">
+                                            Open
+                                        </a>
+                                        <form method="post" onsubmit="return confirm('Delete this GBS group? This cannot be undone.');">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="action" value="delete_gbs_group">
+                                            <input type="hidden" name="gbs_id" value="<?= (int)$group['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -299,6 +357,61 @@ if (isset($_GET['new_leader']) && $is_link_valid):
         </div>
     </div>
 </div>
+
+<?php if ($user_role === 'super_admin'): ?>
+    <div class="card mt-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0"><i class="bi bi-shield-lock"></i> All GBS Groups</h5>
+        </div>
+        <div class="card-body">
+            <?php if (empty($all_groups)): ?>
+                <p class="text-muted mb-0">No GBS groups have been created yet.</p>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Group</th>
+                                <th>Leader</th>
+                                <th>Members</th>
+                                <th>Created</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($all_groups as $group): ?>
+                                <tr>
+                                    <td>
+                                        <strong><?= escape($group['name']) ?></strong><br>
+                                        <small class="text-muted"><?= escape($group['slogan'] ?? 'No slogan') ?></small>
+                                    </td>
+                                    <td><?= escape($group['leader_name'] ?? 'Unknown') ?></td>
+                                    <td><?= (int)$group['member_count'] ?></td>
+                                    <td><?= date('M d, Y', strtotime($group['created_at'])) ?></td>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <a href="gbs_group.php?id=<?= (int)$group['id'] ?>" class="btn btn-sm btn-primary">
+                                                Open
+                                            </a>
+                                            <form method="post" onsubmit="return confirm('Delete this GBS group? This cannot be undone.');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="action" value="delete_gbs_group">
+                                                <input type="hidden" name="gbs_id" value="<?= (int)$group['id'] ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="bi bi-trash"></i> Delete
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
 <?php
 $content = ob_get_clean();

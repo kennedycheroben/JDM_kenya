@@ -58,7 +58,7 @@ try {
     $announcementsDateColumn = searchColumnExists($pdo, 'announcements', 'date_created') ? 'date_created' : 'date_posted';
 
     // --- User Search ---
-    // Find users by name, email, or WhatsApp phone. Super admins see all roles.
+    // Find users by name, email, or WhatsApp phone. JDM Leaders see all roles.
     $stmt = $pdo->prepare("
         SELECT 
             id,
@@ -96,30 +96,49 @@ try {
     $results = array_merge($results, $users);
 
     // --- GBS Group Search ---
-    // Only if user is a member of any GBS group
+    // Members see their own groups; JDM Leader can search every GBS group.
     $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM gbs_members WHERE user_id = ?");
     $stmt->execute([$user_id]);
     $has_gbs_access = $stmt->fetchColumn() > 0;
 
-    if ($has_gbs_access) {
-        $stmt = $pdo->prepare("
-            SELECT 
-                g.id,
-                g.name as title,
-                g.slogan as description,
-                g.leader_id,
-                '' as metadata,
-                'groups' as type,
-                CONCAT('gbs_group.php?id=', g.id) as url,
-                g.pfp_path as avatar
-            FROM gbs_groups g
-            JOIN gbs_members gm ON g.id = gm.gbs_id
-            WHERE gm.user_id = ?
-            AND (g.name LIKE ? OR g.slogan LIKE ?)
-            ORDER BY g.name ASC
-            LIMIT 3
-        ");
-        $stmt->execute([$user_id, $searchPattern, $searchPattern]);
+    if ($has_gbs_access || $user_role === 'super_admin') {
+        if ($user_role === 'super_admin') {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    g.id,
+                    g.name as title,
+                    g.slogan as description,
+                    g.leader_id,
+                    '' as metadata,
+                    'groups' as type,
+                    CONCAT('gbs_group.php?id=', g.id) as url,
+                    g.pfp_path as avatar
+                FROM gbs_groups g
+                WHERE g.name LIKE ? OR g.slogan LIKE ?
+                ORDER BY g.name ASC
+                LIMIT 3
+            ");
+            $stmt->execute([$searchPattern, $searchPattern]);
+        } else {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    g.id,
+                    g.name as title,
+                    g.slogan as description,
+                    g.leader_id,
+                    '' as metadata,
+                    'groups' as type,
+                    CONCAT('gbs_group.php?id=', g.id) as url,
+                    g.pfp_path as avatar
+                FROM gbs_groups g
+                JOIN gbs_members gm ON g.id = gm.gbs_id
+                WHERE gm.user_id = ?
+                AND (g.name LIKE ? OR g.slogan LIKE ?)
+                ORDER BY g.name ASC
+                LIMIT 3
+            ");
+            $stmt->execute([$user_id, $searchPattern, $searchPattern]);
+        }
         $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         // Format group metadata

@@ -8,7 +8,84 @@ function navActive($page) {
     return $currentPage === $page ? 'active' : '';
 }
 $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchAll(PDO::FETCH_ASSOC);
+
+$isMemberPortal = !empty($userRole);
 ?>
+<?php if ($isMemberPortal): ?>
+<?php
+    ob_start();
+?>
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-calendar-event-fill text-primary"></i> Activities & Events</h2>
+        <p class="text-muted mb-0">Discover the latest JDM Kenya seminars, conferences, Missions, and Evangelism.</p>
+    </div>
+</div>
+
+<div class="row gy-4">
+    <?php if ($activities && count($activities) > 0): ?>
+        <?php foreach ($activities as $activity): ?>
+            <div class="col-lg-4 col-md-6">
+                <div class="card activity-card h-100 shadow-sm hover-card">
+                    <?php if ($activity['image']): ?>
+                        <img src="<?= escape($activity['image']) ?>" class="card-img-top" alt="<?= escape($activity['title'] ?? '') ?>" style="height: 200px; object-fit: cover;">
+                    <?php else: ?>
+                        <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                            <i class="bi bi-calendar-event text-secondary" style="font-size: 3rem;"></i>
+                        </div>
+                    <?php endif; ?>
+                    <div class="card-body d-flex flex-column">
+                        <div class="mb-2">
+                            <span class="badge bg-primary me-1"><?= escape($activity['category'] ?? '') ?></span>
+                            <small class="text-muted"><i class="bi bi-calendar3"></i> <?= date('M d, Y', strtotime($activity['date'] ?? $activity['event_date'] ?? 'now')) ?></small>
+                        </div>
+                        <h5 class="card-title"><?= escape($activity['title'] ?? '') ?></h5>
+                        <p class="card-text text-secondary small flex-grow-1"><?= escape(substr($activity['content'] ?? '', 0, 100)) ?>...</p>
+                    </div>
+                    <div class="card-footer bg-transparent border-0">
+                        <small class="text-muted"><i class="bi bi-geo-alt"></i> Nairobi, Kenya</small>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    <?php else: ?>
+        <div class="col-12">
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> No activities are currently scheduled. Check back soon for upcoming events and programs!
+            </div>
+            
+            <div class="row mt-4 text-center">
+                <div class="col-md-4">
+                    <div class="card p-4 h-100">
+                        <i class="bi bi-book text-primary" style="font-size: 2.5rem;"></i>
+                        <h5 class="mt-3">Bible Study Groups</h5>
+                        <p class="text-muted small">Regular in-depth scripture study sessions for all levels.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card p-4 h-100">
+                        <i class="bi bi-people text-primary" style="font-size: 2.5rem;"></i>
+                        <h5 class="mt-3">Community Services</h5>
+                        <p class="text-muted small">Service initiatives, like evangelism, children's home visits and mission work in local communities.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card p-4 h-100">
+                        <i class="bi bi-chat-heart text-primary" style="font-size: 2.5rem;"></i>
+                        <h5 class="mt-3">Prayer Meetings</h5>
+                        <p class="text-muted small">Weekly gatherings for intercession and spiritual growth.</p>
+                    </div>
+                </div>                        
+            </div>
+        </div>
+    <?php endif; ?>
+</div>
+<?php
+    $content = ob_get_clean();
+    $page_title = "Activities - JDM Kenya";
+    include dirname(__FILE__) . '/../portal/layout.php';
+?>
+<?php else: ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,10 +114,10 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
                 <li><a href="activities.php" class="<?= navActive('activities.php') ?>">Activities</a></li>
                 <li><a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
                 <li><a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
-                <?php if ($userRole === 'admin'): ?>
-                    <li><a href="admin_.php" class="btn btn-warning btn-sm px-3"></a></li>
+                <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
+                    <li><a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a></li>
                 <?php elseif ($userRole === 'member'): ?>
-                    <li><a href="resources.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
+                    <li><a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
                 <?php else: ?>
                     <li><a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a></li>
                 <?php endif; ?>
@@ -54,7 +131,7 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
     <section class="container py-5">
         <div class="mb-5">
             <h1 class="section-heading mb-3">Activities & Events</h1>
-            <p class="lead text-muted">Discover the latest JDM Kenya seminars, conferences, and outreach programs designed to strengthen faith and build community.</p>
+            <p class="lead text-muted">Discover the latest JDM Kenya seminars, conferences, Missions, and Evangelism designed to strengthen faith and build community.</p>
         </div>
 
         <div class="row gy-4">
@@ -63,7 +140,7 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
                     <div class="col-lg-4 col-md-6">
                         <div class="card activity-card h-100 shadow-sm hover-card">
                             <?php if ($activity['image']): ?>
-                                <img src="<?= htmlspecialchars($activity['image']) ?>" class="card-img-top" alt="<?= htmlspecialchars($activity['title']) ?>" style="height: 200px; object-fit: cover;">
+                                <img src="<?= escape($activity['image']) ?>" class="card-img-top" alt="<?= escape($activity['title']) ?>" style="height: 200px; object-fit: cover;">
                             <?php else: ?>
                                 <div class="card-img-top bg-secondary d-flex align-items-center justify-content-center" style="height: 200px;">
                                     <i class="bi bi-calendar-event text-white" style="font-size: 3rem;"></i>
@@ -71,8 +148,8 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
                             <?php endif; ?>
                             <div class="card-body">
                                 <span class="badge bg-primary mb-2"><?= date('M d, Y', strtotime($activity['date'])) ?></span>
-                                <h5 class="card-title"><?= htmlspecialchars($activity['title']) ?></h5>
-                                <p class="card-text text-secondary small"><?= htmlspecialchars(substr($activity['content'], 0, 100)) ?>...</p>
+                                <h5 class="card-title"><?= escape($activity['title']) ?></h5>
+                                <p class="card-text text-secondary small"><?= escape(substr($activity['content'], 0, 100)) ?>...</p>
                             </div>
                             <div class="card-footer bg-transparent border-0">
                                 <small class="text-muted"><i class="bi bi-geo-alt"></i> Nairobi, Kenya</small>
@@ -114,10 +191,9 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
                     <div>
                         <div class="col-md-4">
                             <div class="card p-4 h-100">
-                                <!-- Try this if bi-hands still doesn't show up -->
                                 <i class="bi bi-brightness-high text-primary" style="font-size: 2.5rem;"></i>
-                                <h5 class="mt-3">Quite Time</h5>
-                                <p class="text-muted small">Daily quiet time for reflection and spiritual growth through prayer,reading bible and meditation.</p>
+                                <h5 class="mt-3">Quiet Time</h5>
+                                <p class="text-muted small">Daily quiet time for reflection and spiritual growth through prayer, reading bible and meditation.</p>
                             </div>
                         </div>
                     </div>
@@ -136,6 +212,11 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
     <div class="container text-center py-4">
         <p class="mb-1">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
         <p class="text-muted mb-0">Building a discipleship movement with faith, clarity, and service.</p>
+        <div class="d-flex justify-content-center gap-3 mt-3">
+            <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="text-secondary hover-text-primary" title="Facebook"><i class="bi bi-facebook fs-5"></i></a>
+            <a href="#" target="_blank" class="text-secondary hover-text-danger" title="Instagram"><i class="bi bi-instagram fs-5"></i></a>
+            <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="text-secondary hover-text-dark" title="TikTok"><i class="bi bi-tiktok fs-5"></i></a>
+        </div>
     </div>
 </footer>
 
@@ -146,3 +227,4 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
 <script src="/JDM_kenya/assets/js/ui_animations.js"></script>
 </body>
 </html>
+<?php endif; ?>

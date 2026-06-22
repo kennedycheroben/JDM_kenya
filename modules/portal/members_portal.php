@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/downloads.php';
 
 if (empty($_SESSION['user_role'])) {
     header('Location: login.php');
@@ -13,7 +14,7 @@ $userRole = $_SESSION['user_role'] ?? 'member';
 $members = $pdo->query("SELECT id, name, pfp_path FROM users WHERE role IN ('member','admin') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 $resources = $pdo->query('SELECT id, title, file_path, upload_date FROM resources ORDER BY upload_date DESC')->fetchAll(PDO::FETCH_ASSOC);
 $announcements = $pdo->query('SELECT id, title, content, date_posted FROM announcements ORDER BY date_posted DESC LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
-$publicPrayers = $pdo->query('SELECT pr.id, pr.message, pr.created_at, u.name FROM prayer_requests pr INNER JOIN users u ON u.id = pr.user_id WHERE pr.is_private = 0 ORDER BY pr.created_at DESC LIMIT 30')->fetchAll(PDO::FETCH_ASSOC);
+$publicPrayers = $pdo->query('SELECT pr.id, pr.message, pr.created_at, pr.privacy_level, pr.is_private, u.name FROM prayer_requests pr INNER JOIN users u ON u.id = pr.user_id WHERE pr.privacy_level IN ("public", "anonymous") OR pr.is_private = 0 ORDER BY pr.created_at DESC LIMIT 30')->fetchAll(PDO::FETCH_ASSOC);
 
 $pfpPath = null;
 if ($userId > 0) {
@@ -78,7 +79,7 @@ if ($userId > 0) {
                 <li class="nav-item"><a class="nav-link" href="prayer_wall.php">Prayer Wall</a></li>
                 <li class="nav-item"><a class="nav-link" href="gallery.php">Gallery</a></li>
                 <li class="nav-item"><a class="nav-link" href="profile.php">Profile</a></li>
-                <?php if ($userRole === 'admin'): ?>
+                <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
                     <li class="nav-item"><a class="nav-link" href="admin_dashboard.php">Admin</a></li>
                 <?php endif; ?>
             </ul>
@@ -199,7 +200,7 @@ if ($userId > 0) {
                                                 <div class="fw-semibold text-truncate"><?= escape($r['title']) ?></div>
                                                 <div class="text-muted small">Uploaded <?= date('M d, Y', strtotime($r['upload_date'])) ?></div>
                                             </div>
-                                            <a class="btn btn-sm btn-primary flex-shrink-0" href="<?= escape($r['file_path']) ?>" download>
+                                            <a class="btn btn-sm btn-primary flex-shrink-0" href="<?= escape(download_url($r['file_path'], $r['title'])) ?>">
                                                 <i class="bi bi-download"></i>
                                             </a>
                                         </div>
@@ -223,7 +224,16 @@ if ($userId > 0) {
                                     <?php foreach (array_slice($publicPrayers, 0, 5) as $p): ?>
                                         <div class="list-group-item">
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <div class="fw-semibold"><?= escape($p['name']) ?></div>
+                                                <div class="fw-semibold">
+                                                    <?php 
+                                                        $privacyLevel = $p['privacy_level'] ?? ($p['is_private'] ? 'private' : 'public');
+                                                        $displayName = ($privacyLevel === 'anonymous') ? 'Anonymous' : escape($p['name']);
+                                                    ?>
+                                                    <?= $displayName ?>
+                                                    <?php if ($privacyLevel === 'anonymous'): ?>
+                                                        <span class="badge text-bg-info ms-2"><i class="bi bi-incognito"></i> Anonymous</span>
+                                                    <?php endif; ?>
+                                                </div>
                                                 <div class="text-muted small"><?= date('M d, Y', strtotime($p['created_at'])) ?></div>
                                             </div>
                                             <div class="text-muted mt-1"><?= nl2br(escape($p['message'])) ?></div>
@@ -315,4 +325,3 @@ if ($userId > 0) {
 </script>
 </body>
 </html>
-

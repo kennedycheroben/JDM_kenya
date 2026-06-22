@@ -25,7 +25,7 @@ if (!$u) {
 
 $targetRole = $u['role'] ?? 'member';
 
-// Admins cannot delete admins/super admins. Super admins cannot delete other admins via this page (use super_admin_dashboard).
+// Admins cannot delete admins/JDM Leaders. JDM Leaders cannot delete other admins via this page (use super_admin_dashboard).
 if ($viewerRole === 'admin' && ($targetRole === 'admin' || $targetRole === 'super_admin')) {
     header('Location: view_members.php');
     exit;
@@ -43,6 +43,7 @@ $error = '';
 $success = '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_csrf();
     try {
         $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
         header('Location: view_members.php');
@@ -73,6 +74,7 @@ ob_start();
     <div class="card-body">
         <p>Delete <strong><?= escape($u['name']) ?></strong> (<?= escape($u['email']) ?>)?</p>
         <form method="post" class="d-grid d-sm-flex gap-2">
+            <?= csrf_field() ?>
             <button class="btn btn-danger" type="submit"><i class="bi bi-trash"></i> Yes, Delete</button>
             <a class="btn btn-outline-secondary" href="view_member.php?id=<?= (int)$u['id'] ?>">Cancel</a>
         </form>

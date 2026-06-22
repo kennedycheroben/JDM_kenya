@@ -9,6 +9,7 @@ if (empty($_SESSION['user_role'])) {
 
 $user_id = (int)($_SESSION['user_id'] ?? 0);
 $user_role = $_SESSION['user_role'] ?? '';
+$is_super_admin = ($user_role === 'super_admin');
 $gbs_id = (int)($_GET['id'] ?? 0);
 
 if ($gbs_id <= 0) {
@@ -16,14 +17,23 @@ if ($gbs_id <= 0) {
     exit;
 }
 
-// Check if user is a member of this GBS group
-$stmt = $pdo->prepare("
-    SELECT gm.role, g.name, g.slogan, g.pfp_path, g.leader_id, g.chat_restricted
-    FROM gbs_members gm
-    JOIN gbs_groups g ON gm.gbs_id = g.id
-    WHERE gm.gbs_id = ? AND gm.user_id = ?
-");
-$stmt->execute([$gbs_id, $user_id]);
+// Check if user is a member of this GBS group, unless they are the JDM Leader.
+if ($is_super_admin) {
+    $stmt = $pdo->prepare("
+        SELECT 'leader' AS role, g.name, g.slogan, g.pfp_path, g.leader_id, g.chat_restricted
+        FROM gbs_groups g
+        WHERE g.id = ?
+    ");
+    $stmt->execute([$gbs_id]);
+} else {
+    $stmt = $pdo->prepare("
+        SELECT gm.role, g.name, g.slogan, g.pfp_path, g.leader_id, g.chat_restricted
+        FROM gbs_members gm
+        JOIN gbs_groups g ON gm.gbs_id = g.id
+        WHERE gm.gbs_id = ? AND gm.user_id = ?
+    ");
+    $stmt->execute([$gbs_id, $user_id]);
+}
 $membership = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$membership) {
@@ -32,6 +42,8 @@ if (!$membership) {
 }
 
 $is_leader = ($membership['role'] === 'leader');
+$can_manage_group = $is_leader || $is_super_admin;
+$can_delete_group = $is_super_admin || (int)$membership['leader_id'] === $user_id;
 
 // Get group members
 $stmt = $pdo->prepare("
@@ -72,7 +84,8 @@ $resources = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $message = '';
 $error = '';
 
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $is_leader) {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $can_manage_group) {
+    require_csrf();
     $action = $_POST['action'] ?? '';
     
     if ($action === 'add_announcement') {
@@ -209,7 +222,7 @@ ob_start();
                                         <small class="text-muted ms-2">Joined <?= date('M d, Y', strtotime($member['joined_at'])) ?></small>
                                     </div>
                                 </div>
-                                <?php if ($is_leader && $member['id'] !== $user_id): ?>
+                                <?php if ($can_manage_group && $member['id'] !== $user_id): ?>
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
                                             <i class="bi bi-three-dots"></i>
@@ -243,7 +256,7 @@ ob_start();
             <div class="card-header bg-warning text-dark">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-folder"></i> Resources (<?= count($resources) ?>)</h5>
-                    <?php if ($is_leader): ?>
+                    <?php if ($can_manage_group): ?>
                         <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#uploadResourceModal">
                             <i class="bi bi-upload"></i> Upload Resource
                         </button>
@@ -294,7 +307,7 @@ ob_start();
             <div class="card-header bg-danger text-white">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-megaphone"></i> Announcements</h5>
-                    <?php if ($is_leader): ?>
+                    <?php if ($can_manage_group): ?>
                         <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#announcementModal">
                             <i class="bi bi-plus"></i>
                         </button>
@@ -317,7 +330,7 @@ ob_start();
         </div>
 
         <!-- Quick Actions (Leaders only) -->
-        <?php if ($is_leader): ?>
+        <?php if ($can_manage_group): ?>
             <div class="card">
                 <div class="card-header bg-dark text-white">
                     <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Actions</h5>
@@ -331,6 +344,7 @@ ob_start();
                             <i class="bi bi-gear"></i> Manage Group
                         </a>
                         <form method="post" action="gbs_manage.php" class="d-inline">
+                            <?= csrf_field() ?>
                             <input type="hidden" name="action" value="toggle_chat_restriction">
                             <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
                             <input type="hidden" name="restricted" value="<?= $membership['chat_restricted'] ? 0 : 1 ?>">
@@ -339,6 +353,16 @@ ob_start();
                                 <?= $membership['chat_restricted'] ? 'Enable Member Chat' : 'Restrict to Leader Only' ?>
                             </button>
                         </form>
+                        <?php if ($can_delete_group): ?>
+                            <form method="post" action="gbs_manage.php" onsubmit="return confirm('Delete this GBS group? This cannot be undone.');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="delete_gbs_group">
+                                <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
+                                <button type="submit" class="btn btn-outline-danger btn-sm w-100 mt-2">
+                                    <i class="bi bi-trash"></i> Delete Group
+                                </button>
+                            </form>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -362,12 +386,13 @@ ob_start();
                 </div>
             </div>
             <div class="card-footer bg-white">
-                <?php if ($membership['chat_restricted'] && !$is_leader): ?>
+                <?php if ($membership['chat_restricted'] && !$can_manage_group): ?>
                     <div class="alert alert-light border-0 small mb-0 text-center">
                         <i class="bi bi-info-circle"></i> Only the GBS Leader can send messages in this group.
                     </div>
                 <?php else: ?>
                     <form id="groupChatForm" class="d-flex gap-2">
+                        <?= csrf_field() ?>
                         <input type="text" id="groupChatInput" class="form-control" placeholder="Type a message..." autocomplete="off">
                         <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i></button>
                     </form>
@@ -378,7 +403,7 @@ ob_start();
 </div>
 
 <!-- Announcement Modal -->
-<?php if ($is_leader): ?>
+<?php if ($can_manage_group): ?>
 <div class="modal fade" id="announcementModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -387,6 +412,7 @@ ob_start();
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="post">
+                <?= csrf_field() ?>
                 <div class="modal-body">
                     <input type="hidden" name="action" value="add_announcement">
                     <div class="mb-3">
@@ -416,8 +442,9 @@ ob_start();
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="post" action="gbs_manage.php">
+                <?= csrf_field() ?>
                 <div class="modal-body">
-                    <input type="hidden" name="action" value="add_member">
+                    <input type="hidden" name="action" value="remove_member">
                     <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
                     <div class="mb-3">
                         <label class="form-label">Select User</label>
@@ -460,8 +487,9 @@ ob_start();
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="post" action="gbs_manage.php" enctype="multipart/form-data">
+                <?= csrf_field() ?>
                 <div class="modal-body">
-                    <input type="hidden" name="action" value="upload_resource">
+                    <input type="hidden" name="action" value="add_resource">
                     <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
                     <div class="mb-3">
                         <label class="form-label">Resource Title</label>

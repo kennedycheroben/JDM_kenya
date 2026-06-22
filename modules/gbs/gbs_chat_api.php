@@ -11,6 +11,8 @@ if (empty($_SESSION['user_id'])) {
 }
 
 $user_id = (int)$_SESSION['user_id'];
+$user_role = $_SESSION['user_role'] ?? '';
+$is_super_admin = ($user_role === 'super_admin');
 $gbs_id = (int)($_REQUEST['gbs_id'] ?? 0);
 $action = $_REQUEST['action'] ?? 'fetch';
 
@@ -20,10 +22,16 @@ if ($gbs_id <= 0) {
     exit;
 }
 
-// Check if user is a member
-$stmt = $pdo->prepare("SELECT role FROM gbs_members WHERE gbs_id = ? AND user_id = ?");
-$stmt->execute([$gbs_id, $user_id]);
-$membership = $stmt->fetch();
+// Check if user is a member, unless they are the JDM Leader.
+if ($is_super_admin) {
+    $stmt = $pdo->prepare("SELECT id FROM gbs_groups WHERE id = ? LIMIT 1");
+    $stmt->execute([$gbs_id]);
+    $membership = $stmt->fetch() ? ['role' => 'leader'] : false;
+} else {
+    $stmt = $pdo->prepare("SELECT role FROM gbs_members WHERE gbs_id = ? AND user_id = ?");
+    $stmt->execute([$gbs_id, $user_id]);
+    $membership = $stmt->fetch();
+}
 
 if (!$membership) {
     ob_clean();
@@ -31,7 +39,7 @@ if (!$membership) {
     exit;
 }
 
-$is_leader = ($membership['role'] === 'leader');
+$is_leader = ($membership['role'] === 'leader') || $is_super_admin;
 
 if ($action === 'fetch') {
     $last_id = (int)($_GET['last_id'] ?? 0);

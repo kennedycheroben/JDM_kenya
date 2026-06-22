@@ -19,7 +19,7 @@ function navActive($page) {
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css">
+    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/JDM_kenya/assets/css/style.css') ?>">
     <link rel="icon" type="image/png" href="/JDM_kenya/images/jdm_logo.png">
 </head>
 <body>
@@ -33,12 +33,13 @@ function navActive($page) {
                 <li><a href="/JDM_kenya/index.php" class="<?= navActive('index.php') ?>">Home</a></li>
                 <li><a href="/JDM_kenya/about.php" class="<?= navActive('about.php') ?>">About</a></li>
                 <li><a href="/JDM_kenya/activities.php" class="<?= navActive('activities.php') ?>">Activities</a></li>
+                <li><a href="/JDM_kenya/sports.php" class="<?= navActive('sports.php') ?>">Sports</a></li>
                 <li><a href="/JDM_kenya/resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
                 <li><a href="/JDM_kenya/contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
-                <?php if ($userRole === 'admin'): ?>
+                <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
                     <li><a href="/JDM_kenya/admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a></li>
                 <?php elseif ($userRole === 'member'): ?>
-                    <li><a href="/JDM_kenya/resources.php" class="btn btn-warning btn-sm px-3">Member Portal</a></li>
+                    <li><a href="/JDM_kenya/member_dashboard.php" class="btn btn-warning btn-sm px-3">Member Portal</a></li>
                 <?php else: ?>
                     <li><a href="/JDM_kenya/login.php" class="btn btn-warning btn-sm px-3">Sign In</a></li>
                 <?php endif; ?>

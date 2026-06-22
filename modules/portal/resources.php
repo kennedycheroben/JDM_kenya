@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/downloads.php';
 $userRole = $_SESSION['user_role'] ?? null;
 $userName = $_SESSION['user_name'] ?? null;
 
@@ -114,7 +115,7 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
                                             </video>
                                         </div>
                                     <?php endif; ?>
-                                    <a class="btn btn-sm btn-primary" href="/JDM_kenya/modules/helpers/download_helper.php?file=<?= urlencode($r['file_path'] ?? '') ?>&name=<?= urlencode($r['title'] ?? 'download') ?>">
+                                    <a class="btn btn-sm btn-primary" href="<?= escape(download_url($r['file_path'] ?? '', $r['title'] ?? 'download')) ?>">
                                         <i class="bi bi-download"></i> Download
                                     </a>
                                 </td>
@@ -207,7 +208,7 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
                                             ?>
                                             <i class="bi <?= $icon ?>" style="font-size: 1.5rem;"></i>
                                             <div class="ms-3 flex-grow-1">
-                                                <h6 class="card-title mb-1"><?= htmlspecialchars($resource['title'] ?? 'Resource') ?></h6>
+                                            <h6 class="card-title mb-1"><?= escape($resource['title'] ?? 'Resource') ?></h6>
                                                 <small class="text-muted">Uploaded <?= date('M d, Y', strtotime($resource['upload_date'])) ?></small>
                                             </div>
                                         </div>
@@ -239,8 +240,8 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
                         foreach ($galleryPreview as $image): 
                         ?>
                             <div class="col-6 col-md-4 col-lg-3">
-                                <div class="card shadow-sm overflow-hidden gallery-card" style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#imageModal" onclick="showImage('<?= htmlspecialchars($image['file_path']) ?>', '<?= htmlspecialchars($image['title'] ?? 'Gallery Image') ?>')">
-                                    <img src="<?= htmlspecialchars($image['file_path']) ?>" class="card-img-top" alt="<?= htmlspecialchars($image['title'] ?? 'Gallery Image') ?>" style="height: 200px; object-fit: cover; transition: transform 0.3s;" loading="lazy">
+                                <div class="card shadow-sm overflow-hidden gallery-card" style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#imageModal" onclick="showImage('<?= escape($image['file_path']) ?>', '<?= escape($image['title'] ?? 'Gallery Image') ?>')">
+                                    <img src="<?= escape($image['file_path']) ?>" class="card-img-top" alt="<?= escape($image['title'] ?? 'Gallery Image') ?>" style="height: 200px; object-fit: cover; transition: transform 0.3s;" loading="lazy">
                                     <div class="card-body p-2">
                                         <small class="text-muted"><i class="bi bi-calendar"></i> <?= date('M d, Y', strtotime($image['uploaded_at'])) ?></small>
                                     </div>
@@ -276,6 +277,11 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
     <div class="container text-center py-4">
         <p class="mb-1">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
         <p class="text-muted mb-0">Building a discipleship movement with faith, clarity, and service.</p>
+        <div class="d-flex justify-content-center gap-3 mt-3">
+            <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="text-secondary hover-text-primary" title="Facebook"><i class="bi bi-facebook fs-5"></i></a>
+            <a href="#" target="_blank" class="text-secondary hover-text-danger" title="Instagram"><i class="bi bi-instagram fs-5"></i></a>
+            <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="text-secondary hover-text-dark" title="TikTok"><i class="bi bi-tiktok fs-5"></i></a>
+        </div>
     </div>
 </footer>
 

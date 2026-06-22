@@ -30,6 +30,7 @@ $success = '';
 $isNewLeader = isset($_GET['new_leader']) && $_GET['new_leader'] === '1';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_csrf();
     $groupName = trim($_POST['group_name'] ?? '');
     $groupSlogan = trim($_POST['group_slogan'] ?? '');
     $leaderName = trim($_POST['leader_name'] ?? $userName);
@@ -199,6 +200,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             <?php endif; ?>
             
             <form method="post" enctype="multipart/form-data" id="gbsSetupForm">
+                <?= csrf_field() ?>
                 <div class="row">
                     <div class="col-md-8">
                         <div class="mb-4">

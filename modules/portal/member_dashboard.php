@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/downloads.php';
 
 // Check member access
 if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'member' && $_SESSION['user_role'] !== 'admin')) {
@@ -15,6 +16,183 @@ $user_role = $_SESSION['user_role'];
 $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
 $stmt->execute([$user_id]);
 $member = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// =====================================================================
+// OFFICE BEARER APPROVAL CHECK
+// =====================================================================
+// If this is a partner (office bearer) and not yet approved,
+// show pending approval message instead of full dashboard
+if ($member && $member['category'] === 'partner' && (!isset($member['is_approved']) || !$member['is_approved'])) {
+    // Show pending approval page
+    ob_start();
+    ?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Pending Approval | JDM Kenya</title>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css">
+        <style>
+            body {
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }
+            
+            .pending-card {
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                max-width: 600px;
+                overflow: hidden;
+            }
+            
+            .pending-header {
+                background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+                color: white;
+                padding: 40px 30px;
+                text-align: center;
+            }
+            
+            .pending-header h2 {
+                margin: 0 0 10px 0;
+                font-size: 28px;
+                font-weight: 600;
+            }
+            
+            .pending-header p {
+                margin: 0;
+                opacity: 0.95;
+            }
+            
+            .pending-body {
+                padding: 40px 30px;
+            }
+            
+            .pending-icon {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            
+            .pending-icon i {
+                font-size: 64px;
+                color: #ffc107;
+            }
+            
+            .status-box {
+                background: #f8f9fa;
+                border-left: 4px solid #ffc107;
+                padding: 20px;
+                border-radius: 4px;
+                margin-bottom: 20px;
+            }
+            
+            .status-box h5 {
+                color: #102a54;
+                margin-bottom: 10px;
+            }
+            
+            .status-box p {
+                margin: 8px 0;
+                color: #555;
+                line-height: 1.6;
+            }
+            
+            .pending-body a {
+                color: #102a54;
+                text-decoration: none;
+            }
+            
+            .pending-body a:hover {
+                text-decoration: underline;
+            }
+            
+            .footer-link {
+                text-align: center;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #dee2e6;
+            }
+            
+            .logout-btn {
+                display: inline-block;
+                margin-top: 15px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="pending-card">
+            <div class="pending-header">
+                <h2>⏳ Pending Approval</h2>
+                <p>Your office bearer registration is under review</p>
+            </div>
+            
+            <div class="pending-body">
+                <div class="pending-icon">
+                    <i class="fas fa-hourglass-end"></i>
+                </div>
+                
+                <div class="status-box">
+                    <h5><i class="fas fa-check-circle" style="color: #ffc107;"></i> Thank You for Registering!</h5>
+                    <p>
+                        Hello <?= escape($member['name']) ?>,
+                    </p>
+                    <p>
+                        We have received your registration as an Office Bearer in JDM Kenya. 
+                        Your application is currently being reviewed by our JDM leadership team.
+                    </p>
+                </div>
+                
+                <div class="status-box">
+                    <h5><i class="fas fa-clock" style="color: #ffc107;"></i> What Happens Next?</h5>
+                    <p>
+                        Our Super Admin will review your application and verify your details. 
+                        You will receive a notification via email and in-app message once a decision has been made.
+                    </p>
+                    <p class="mb-0">
+                        <strong>This usually takes 1-2 business days.</strong>
+                    </p>
+                </div>
+                
+                <div class="status-box">
+                    <h5><i class="fas fa-envelope" style="color: #ffc107;"></i> Account Information</h5>
+                    <p><strong>Email:</strong> <?= escape($member['email']) ?></p>
+                    <p class="mb-0"><strong>WhatsApp:</strong> <?= escape($member['whatsapp_phone']) ?></p>
+                </div>
+                
+                <div class="status-box">
+                    <h5><i class="fas fa-question-circle" style="color: #ffc107;"></i> Need Help?</h5>
+                    <p>
+                        If you have any questions or need to update your information, 
+                        please contact <a href="mailto:admin@jdmkenya.com">JDM leadership</a>.
+                    </p>
+                </div>
+                
+                <div class="footer-link">
+                    <p class="text-muted">
+                        You can log out now and check back later, or keep this page open.
+                    </p>
+                    <a href="logout.php" class="btn btn-sm btn-outline-primary logout-btn">
+                        <i class="fas fa-sign-out-alt"></i> Log Out
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+    </body>
+    </html>
+    <?php
+    echo ob_get_clean();
+    exit;
+}
+
 
 // Get resources
 $resources = $pdo->query('SELECT * FROM resources ORDER BY upload_date DESC')->fetchAll(PDO::FETCH_ASSOC);
@@ -53,13 +231,14 @@ ob_start();
             <div class="card-body">
                 <p><strong>Name:</strong> <?= escape($member['name']) ?></p>
                 <p><strong>Email:</strong> <?= escape($member['email']) ?></p>
-                <p><strong>WhatsApp:</strong> <?= escape($member['whatsapp_phone']) ?></p>
+                <p><strong>WhatsApp:</strong> <?= escape(maskPhone($member['whatsapp_phone'] ?? '')) ?></p>
                 <p><strong>Category:</strong> 
                     <?php 
                     $badge = match($member['category']) {
                         'student' => '<span class="badge bg-info"><i class="bi bi-book"></i> Student</span>',
                         'associate' => '<span class="badge bg-success"><i class="bi bi-briefcase"></i> Associate</span>',
-                        'partner' => '<span class="badge bg-warning text-dark"><i class="bi bi-handshake"></i> Partner</span>',
+                        'partner' => '<span class="badge bg-warning text-dark"><i class="bi bi-briefcase-fill"></i> Office Bearer</span>',
+                        'other' => '<span class="badge bg-secondary">Member</span>',
                         default => '<span class="badge bg-secondary">Member</span>'
                     };
                     echo $badge;
@@ -185,7 +364,7 @@ ob_start();
                                         <small class="text-muted d-block mb-3"><?= date('M d, Y', strtotime($resource['upload_date'])) ?></small>
                                     </div>
                                     <div class="card-footer bg-transparent">
-                                        <a href="<?= escape($resource['file_path']) ?>" class="btn btn-primary btn-sm w-100" download>
+                                        <a href="<?= escape(download_url($resource['file_path'], $resource['title'])) ?>" class="btn btn-primary btn-sm w-100">
                                             <i class="bi bi-download"></i> Download
                                         </a>
                                     </div>
@@ -220,7 +399,7 @@ ob_start();
                     <div class="row g-3">
                         <?php foreach ($galleryImages as $image): ?>
                             <div class="col-6 col-md-4 col-lg-3">
-                                <div class="card shadow-sm overflow-hidden gallery-card" style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#imageModal" onclick="showImage('<?= htmlspecialchars($image['file_path']) ?>', '<?= htmlspecialchars($image['title'] ?? 'Gallery Image') ?>')">
+                                <div class="card shadow-sm overflow-hidden gallery-card" style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#imageModal" onclick="showImage('<?= escape($image['file_path']) ?>', '<?= escape($image['title'] ?? 'Gallery Image') ?>')">
                                     <img src="<?= escape($image['file_path']) ?>" class="card-img-top" alt="Gallery" style="height: 150px; object-fit: cover; transition: transform 0.3s;">
                                     <div class="card-body p-2">
                                         <small class="text-muted"><i class="bi bi-calendar"></i> <?= date('M d, Y', strtotime($image['uploaded_at'])) ?></small>

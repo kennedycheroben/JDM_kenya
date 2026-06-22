@@ -19,6 +19,7 @@ This server manages real-time chat, automated birthday celebrations, and video p
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
@@ -40,8 +41,20 @@ DB_CONFIG = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# --- Lifespan Management (replaces deprecated on_event) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manages startup and shutdown lifecycle events."""
+    # Startup: launch background birthday engine
+    asyncio.create_task(birthday_engine.start_monitoring())
+    logger.info("Real-time communication services ready")
+    yield
+    # Shutdown: graceful teardown
+    birthday_engine.running = False
+    logger.info("Services shutting down")
+
 # --- FastAPI App Initialization ---
-app = FastAPI(title="JDM Kenya WebSocket Server", version="1.1.0")
+app = FastAPI(title="JDM Kenya WebSocket Server", version="1.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -313,11 +326,12 @@ async def handle_video_progress(data: dict):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        progress_pct = int(data.get('progress', 0) * 100) if isinstance(data.get('progress'), float) and data.get('progress') <= 1 else int(data.get('progress', 0))
         cursor.execute("""
-            INSERT INTO video_progress (user_id, video_id, progress, completed, updated_at)
+            INSERT INTO video_progress (user_id, video_id, progress_percent, completed, updated_at)
             VALUES (%s, %s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE progress = VALUES(progress), completed = VALUES(completed), updated_at = NOW()
-        """, (data['user_id'], data['video_id'], data['progress'], data['completed']))
+            ON DUPLICATE KEY UPDATE progress_percent = VALUES(progress_percent), completed = VALUES(completed), updated_at = NOW()
+        """, (data['user_id'], data['video_id'], progress_pct, data.get('completed', False)))
         conn.commit()
         
         if data.get('completed'):
@@ -329,20 +343,6 @@ async def handle_video_progress(data: dict):
     finally:
         cursor.close()
         conn.close()
-
-# --- Lifecycle Management ---
-
-@app.on_event("startup")
-async def startup_event():
-    """Initializes background engines on server startup."""
-    asyncio.create_task(birthday_engine.start_monitoring())
-    logger.info("Real-time communication services ready")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Graceful teardown of background services."""
-    birthday_engine.running = False
-    logger.info("Services shutting down")
 
 if __name__ == "__main__":
     import uvicorn

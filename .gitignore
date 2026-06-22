@@ -29,3 +29,6 @@ scratch/
 # Agent metadata
 .agents/
 .codex/
+
+# Config file (may contain secrets in production)
+config.php

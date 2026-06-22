@@ -10,6 +10,7 @@ if (isset($_SESSION['user_role']) && !empty($_SESSION['user_role'])) {
 $error = '';
 $success = '';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_csrf();
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $whatsappPhone = trim($_POST['whatsapp_phone'] ?? '');
@@ -25,7 +26,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $birthMonth = (int)($_POST['birth_month'] ?? 0);
     $birthDay = (int)($_POST['birth_day'] ?? 0);
 
-    $allowedCategories = ['student', 'associate', 'partner'];
+    $allowedCategories = ['student', 'associate', 'partner', 'other'];
     $allowedCampuses = ['Main Campus', 'Upper Kabete', 'Lower Kabete', 'Chiromo', 'Kikuyu', 'Parklands'];
 
     if ($name === '' || $email === '' || $whatsappPhone === '' || $category === '' || $password === '' || $confirm === '') {
@@ -38,7 +39,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $error = 'Please enter a valid birth year.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please provide a valid email address.';
-    } elseif (($category === 'associate' || $category === 'partner') && ($graduationYear === '' || $currentProfession === '')) {
+    } elseif ($category === 'associate' && ($graduationYear === '' || $currentProfession === '')) {
         $error = 'Please provide graduation year and current profession for this category.';
     } elseif (!in_array($category, $allowedCategories, true)) {
         $error = 'Please select a valid member category.';
@@ -56,19 +57,76 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             try {
                 $pdo->beginTransaction();
                 $dateOfBirth = sprintf('%04d-%02d-%02d', $birthYear, $birthMonth, $birthDay);
-                $insert = $pdo->prepare('INSERT INTO users (name, email, whatsapp_phone, password, role, category, date_of_birth) VALUES (?, ?, ?, ?, ?, ?, ?);');
-                $insert->execute([$name, $email, $whatsappPhone, $hash, 'member', $category, $dateOfBirth]);
+                
+                // Sanitize and capture the new Partner (Office Bearer) specialized fields
+                $gradYearParam = null;
+                $campusRoleParam = null;
+                $employmentStatusParam = null;
+                $companyNameParam = null;
+                $industryProfessionParam = null;
+                $partnershipFocusParam = null;
+                $contributionPhoneParam = null;
+
+                if ($category === 'partner') {
+                    // Extract and prepare values from POST (PDO prepared statements handle SQL injection)
+                    $gradYearParam = !empty($_POST['partner_graduation_year']) ? (int)$_POST['partner_graduation_year'] : null;
+                    $campusRoleParam = !empty($_POST['partner_campus_role']) ? trim($_POST['partner_campus_role']) : null;
+                    
+                    $empStatusRaw = !empty($_POST['partner_employment_status']) ? trim($_POST['partner_employment_status']) : null;
+                    if ($empStatusRaw === 'Other' && !empty($_POST['partner_employment_status_other'])) {
+                        $employmentStatusParam = trim($_POST['partner_employment_status_other']);
+                    } else {
+                        $employmentStatusParam = $empStatusRaw ?: null;
+                    }
+                    
+                    $companyNameParam = !empty($_POST['partner_company_name']) ? trim($_POST['partner_company_name']) : null;
+                    
+                    $indProfRaw = !empty($_POST['partner_industry_profession']) ? trim($_POST['partner_industry_profession']) : null;
+                    if ($indProfRaw === 'Other' && !empty($_POST['partner_industry_profession_other'])) {
+                        $industryProfessionParam = trim($_POST['partner_industry_profession_other']);
+                    } else {
+                        $industryProfessionParam = $indProfRaw ?: null;
+                    }
+                    
+                    $partnershipFocusParam = !empty($_POST['partner_partnership_focus']) ? trim($_POST['partner_partnership_focus']) : null;
+                    $contributionPhoneParam = !empty($_POST['partner_contribution_phone']) ? trim($_POST['partner_contribution_phone']) : null;
+                } elseif ($category === 'associate') {
+                    $gradYearParam = $graduationYear !== '' ? (int)$graduationYear : null;
+                    $industryProfessionParam = $currentProfession !== '' ? trim($currentProfession) : null;
+                }
+
+                // =====================================================================
+                // OFFICE BEARER APPROVAL WORKFLOW
+                // =====================================================================
+                // Partners (Office Bearers) must be approved by Super Admin before
+                // they can access the full dashboard. Set is_approved = 0 for partners.
+                $isApproved = ($category === 'partner') ? 0 : 1;
+                
+                // Insert into main users table with both basic info and conditional partner/office bearer fields
+                $insert = $pdo->prepare('
+                    INSERT INTO users (
+                        name, email, whatsapp_phone, password, role, category, date_of_birth,
+                        graduation_year, campus_role, employment_status, company_name,
+                        industry_profession, partnership_focus, contribution_phone, is_approved
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                ');
+                $insert->execute([
+                    $name, $email, $whatsappPhone, $hash, 'member', $category, $dateOfBirth,
+                    $gradYearParam, $campusRoleParam, $employmentStatusParam, $companyNameParam,
+                    $industryProfessionParam, $partnershipFocusParam, $contributionPhoneParam, $isApproved
+                ]);
                 $userId = (int)$pdo->lastInsertId();
 
                 if ($category === 'student') {
                     $stmt2 = $pdo->prepare('INSERT INTO students (user_id, campus_name) VALUES (?, ?)');
                     $stmt2->execute([$userId, $campusName]);
                 } elseif ($category === 'partner') {
-                    $stmt2 = $pdo->prepare('INSERT INTO marketplace_partners (user_id, graduation_year, current_profession) VALUES (?, ?, ?)');
-                    $stmt2->execute([$userId, $graduationYear !== '' ? $graduationYear : null, $currentProfession !== '' ? $currentProfession : null]);
+                    // For backward compatibility and relational integrity, insert also in marketplace_partners
+                    $stmt2 = $pdo->prepare('INSERT INTO marketplace_partners (user_id, business_name, current_profession, graduation_year) VALUES (?, ?, ?, ?)');
+                    $stmt2->execute([$userId, $companyNameParam, $industryProfessionParam, $gradYearParam]);
                 } elseif ($category === 'associate') {
-                        $stmt2 = $pdo->prepare('INSERT INTO associates (user_id, graduation_year, current_profession) VALUES (?, ?, ?)');
-                        $stmt2->execute([$userId, $graduationYear !== '' ? $graduationYear : null, $currentProfession !== '' ? $currentProfession : null]);
+                    $stmt2 = $pdo->prepare('INSERT INTO associates (user_id, graduation_year, current_profession) VALUES (?, ?, ?)');
+                    $stmt2->execute([$userId, $gradYearParam, $industryProfessionParam]);
                 }
 
                 $pdo->commit();
@@ -113,6 +171,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         <div class="alert alert-success"><?= escape($success) ?></div>
                     <?php endif; ?>
                     <form method="post" novalidate>
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label class="form-label">Full Name</label>
                             <input type="text" name="name" class="form-control" required>
@@ -123,7 +182,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         </div>
                         <div class="mb-3">
                             <label class="form-label">WhatsApp Phone Number</label>
-                            <input type="tel" name="whatsapp_phone" class="form-control" placeholder="0712345678" required>
+                            <input type="number" name="whatsapp_phone" class="form-control" placeholder="0712345678" required>
                             <div class="form-text">This number is for WhatsApp connectivity.</div>
                         </div>
                         <div class="mb-3">
@@ -132,7 +191,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                 <option value="" selected disabled>Select category</option>
                                 <option value="student">Student</option>
                                 <option value="associate">Associate</option>
-                                <option value="partner">Partner</option>
+                                <option value="partner">Office Bearer</option>
+                                <option value="other">Other</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -194,6 +254,84 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                 <label class="form-label">Current Profession</label>
                                 <input type="text" name="current_profession" id="current_profession" class="form-control" maxlength="120">
                             </div>
+                            
+                            <!-- Specialized Fields for Office Bearers (Partners) -->
+                            <div id="partner-fields" style="display: none;">
+                                <div class="card p-3 mb-3 border-warning" style="background-color: #fffdf5;">
+                                    <h6 class="text-warning fw-bold mb-3"><i class="fa fa-briefcase"></i> Office Bearer Details</h6>
+                                    
+                                    <!-- Academic & JDM History -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Graduation Year (UON Alumni Verification)</label>
+                                        <select name="partner_graduation_year" id="partner_graduation_year" class="form-select">
+                                            <option value="" selected disabled>Select graduation year</option>
+                                            <?php for ($y = 2026; $y >= 2010; $y--): ?>
+                                                <option value="<?= $y ?>"><?= $y ?></option>
+                                            <?php endfor; ?>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Campus Responsibility/Role Held</label>
+                                        <select name="partner_campus_role" id="partner_campus_role" class="form-select">
+                                            <option value="" selected disabled>Select former role</option>
+                                            <option value="JDM Chairperson">JDM Chairperson</option>
+                                            <option value="GBS leader">GBS leader</option>
+                                            <option value="JDM leader">JDM leader</option>
+                                            <option value="JDM Member">JDM Member</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Professional & Business Profile -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Employment Status</label>
+                                        <select name="partner_employment_status" id="partner_employment_status" class="form-select">
+                                            <option value="" selected disabled>Select employment status</option>
+                                            <option value="Employed">Employed</option>
+                                            <option value="Business Owner">Business Owner</option>
+                                            <option value="Self-Employed">Self-Employed</option>
+                                            <option value="Freelancer">Freelancer</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3 d-none" id="employmentStatusOtherWrapper">
+                                        <label class="form-label">Please specify employment status</label>
+                                        <input type="text" name="partner_employment_status_other" id="partner_employment_status_other" class="form-control" placeholder="Specify status">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Organization / Business Name</label>
+                                        <input type="text" name="partner_company_name" id="partner_company_name" class="form-control" placeholder="Workplace or name of enterprise">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Industry / Profession</label>
+                                        <select name="partner_industry_profession" id="partner_industry_profession" class="form-select">
+                                            <option value="" selected disabled>Select industry/profession</option>
+                                            <option value="IT">IT</option>
+                                            <option value="Finance">Finance</option>
+                                            <option value="Engineering">Engineering</option>
+                                            <option value="Healthcare">Healthcare</option>
+                                            <option value="Business Services">Business Services</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3 d-none" id="industryOtherWrapper">
+                                        <label class="form-label">Please specify industry/profession</label>
+                                        <input type="text" name="partner_industry_profession_other" id="partner_industry_profession_other" class="form-control" placeholder="Specify industry/profession">
+                                    </div>
+
+                                    <!-- Ministry Partnership & Support -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Partnership Focus Area</label>
+                                        <select name="partner_partnership_focus" id="partner_partnership_focus" class="form-select">
+                                            <option value="" selected disabled>Select primary focus</option>
+                                            <option value="Missions & Evangelism Support">Missions & Evangelism Support</option>
+                                            <option value="Student Welfare & Mentorship">Student Welfare & Mentorship</option>
+                                            <option value="GBS/Discipleship Material Development">GBS/Discipleship Material Development</option>
+                                            <option value="General Ministry Operations">General Ministry Operations</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
                         <div class="mb-3">
                             <label class="form-label">Password</label>
                             <input type="password" name="password" class="form-control" required>
@@ -225,17 +363,63 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         const category = document.getElementById('category');
         const campusWrapper = document.getElementById('campusWrapper');
         const campus = document.getElementById('campus_name');
+        
+        // Associate fields
         const gradYearFields = document.getElementById('gradYearFields');
         const gradYearInput = document.getElementById('graduation_year');
         const professionFields = document.getElementById('professionFields');
         const professionInput = document.getElementById('current_profession');
+
+        // Partner / Office Bearer fields
+        const partnerFields = document.getElementById('partner-fields');
+        const partnerGradYear = document.getElementById('partner_graduation_year');
+        const partnerCampusRole = document.getElementById('partner_campus_role');
+        const partnerEmpStatus = document.getElementById('partner_employment_status');
+        const partnerCompany = document.getElementById('partner_company_name');
+        const partnerIndustry = document.getElementById('partner_industry_profession');
+        const partnerFocus = document.getElementById('partner_partnership_focus');
+
+        // Other option sub-fields
+        const empStatusOtherWrapper = document.getElementById('employmentStatusOtherWrapper');
+        const empStatusOtherInput = document.getElementById('partner_employment_status_other');
+        const industryOtherWrapper = document.getElementById('industryOtherWrapper');
+        const industryOtherInput = document.getElementById('partner_industry_profession_other');
+
+        // Watch Employment Status dropdown
+        if (partnerEmpStatus) {
+            partnerEmpStatus.addEventListener('change', function() {
+                if (this.value === 'Other') {
+                    empStatusOtherWrapper.classList.remove('d-none');
+                    empStatusOtherInput.setAttribute('required', 'required');
+                } else {
+                    empStatusOtherWrapper.classList.add('d-none');
+                    empStatusOtherInput.removeAttribute('required');
+                    empStatusOtherInput.value = '';
+                }
+            });
+        }
+
+        // Watch Industry dropdown
+        if (partnerIndustry) {
+            partnerIndustry.addEventListener('change', function() {
+                if (this.value === 'Other') {
+                    industryOtherWrapper.classList.remove('d-none');
+                    industryOtherInput.setAttribute('required', 'required');
+                } else {
+                    industryOtherWrapper.classList.add('d-none');
+                    industryOtherInput.removeAttribute('required');
+                    industryOtherInput.value = '';
+                }
+            });
+        }
 
         function updateFields() {
             if (!category) return;
             
             const selectedCategory = category.value;
             const isStudent = selectedCategory === 'student';
-            const isAssociateOrPartner = selectedCategory === 'associate' || selectedCategory === 'partner';
+            const isAssociate = selectedCategory === 'associate';
+            const isPartner = selectedCategory === 'partner';
 
             // Handle Campus field
             if (campusWrapper && campus) {
@@ -249,9 +433,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
-            // Handle Graduation Year field
+            // Handle Graduation Year field for Associate
             if (gradYearFields && gradYearInput) {
-                if (isAssociateOrPartner) {
+                if (isAssociate) {
                     gradYearFields.classList.remove('d-none');
                     gradYearInput.setAttribute('required', 'required');
                 } else {
@@ -261,9 +445,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
-            // Handle Profession field
+            // Handle Profession field for Associate
             if (professionFields && professionInput) {
-                if (isAssociateOrPartner) {
+                if (isAssociate) {
                     professionFields.classList.remove('d-none');
                     professionInput.setAttribute('required', 'required');
                 } else {
@@ -272,11 +456,44 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     professionInput.value = '';
                 }
             }
+
+            // Handle Partner/Office Bearer fields
+            if (partnerFields) {
+                if (isPartner) {
+                    partnerFields.style.display = 'block';
+                    partnerGradYear?.setAttribute('required', 'required');
+                    partnerCampusRole?.setAttribute('required', 'required');
+                    partnerEmpStatus?.setAttribute('required', 'required');
+                    partnerCompany?.setAttribute('required', 'required');
+                    partnerIndustry?.setAttribute('required', 'required');
+                    partnerFocus?.setAttribute('required', 'required');
+                } else {
+                    partnerFields.style.display = 'none';
+                    partnerGradYear?.removeAttribute('required');
+                    partnerCampusRole?.removeAttribute('required');
+                    partnerEmpStatus?.removeAttribute('required');
+                    partnerCompany?.removeAttribute('required');
+                    partnerIndustry?.removeAttribute('required');
+                    partnerFocus?.removeAttribute('required');
+                    
+                    // Reset Partner values
+                    if (partnerGradYear) partnerGradYear.value = '';
+                    if (partnerCampusRole) partnerCampusRole.value = '';
+                    if (partnerEmpStatus) partnerEmpStatus.value = '';
+                    if (partnerCompany) partnerCompany.value = '';
+                    if (partnerIndustry) partnerIndustry.value = '';
+                    if (partnerFocus) partnerFocus.value = '';
+                    
+                    empStatusOtherWrapper.classList.add('d-none');
+                    empStatusOtherInput.value = '';
+                    industryOtherWrapper.classList.add('d-none');
+                    industryOtherInput.value = '';
+                }
+            }
         }
 
         if (category) {
             category.addEventListener('change', updateFields);
-            // Initialize on page load
             updateFields();
         }
     });

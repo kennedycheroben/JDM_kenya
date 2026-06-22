@@ -20,3 +20,21 @@ RewriteRule ^modules/portal/prayer_wall\.php$ prayer_wall.php [R=301,L]
 RewriteRule ^modules/chat/chat\.php$ chat.php [R=301,L]
 RewriteRule ^modules/chat/check_new_messages\.php$ check_new_messages.php [R=301,L]
 RewriteRule ^modules/chat/mark_as_read\.php$ mark_as_read.php [R=301,L]
+RewriteRule ^modules/sports/sports_admin\.php$ sports_admin.php [R=301,L]
+RewriteRule ^modules/sports/sports_hub\.php$ sports.php [R=301,L]
+
+# Performance: Cache static assets for 1 year
+<FilesMatch "\.(ico|pdf|flv|jpg|jpeg|png|gif|js|css|swf|webp|svg)$">
+    Header set Cache-Control "max-age=31536000, public, immutable"
+</FilesMatch>
+
+# Performance: Enable GZIP compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Security: Prevent directory listing
+Options -Indexes
+
+# Security: Hide PHP version
+ServerSignature Off

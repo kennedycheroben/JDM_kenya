@@ -6,23 +6,12 @@ if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'member' && $_S
     exit;
 }
 
-function waLink(string $phone): string {
-    // Keep digits only; WhatsApp wa.me expects international number without '+' or spaces.
-    $digits = preg_replace('/\D+/', '', $phone);
-    return $digits ? 'https://wa.me/' . $digits : '#';
+$is_super_admin = ($_SESSION['user_role'] === 'super_admin');
+if ($is_super_admin) {
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 }
-
-function maskPhone(string $phone): string {
-    // Show first 4 and last 2 digits, mask the middle: 0712****78
-    $digits = preg_replace('/\D+/', '', $phone);
-    if ($digits === '') return '';
-    if (strlen($digits) <= 6) return $digits; // too short to mask meaningfully
-    $first = substr($digits, 0, 4);
-    $last = substr($digits, -2);
-    return $first . str_repeat('*', max(0, strlen($digits) - 6)) . $last;
-}
-
-$members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 ob_start();
 ?>
@@ -48,11 +37,20 @@ ob_start();
                     <?php endif; ?>
                     <div class="flex-grow-1">
                         <div class="fw-semibold"><?= escape($m['name']) ?></div>
+                        <?php 
+                        $can_view_phone = in_array($_SESSION['user_role'] ?? '', ['admin', 'super_admin']) || !empty($_SESSION['is_gbs_leader']);
+                        if ($can_view_phone): 
+                        ?>
                         <div class="small">
                             <a href="<?= escape(waLink($m['whatsapp_phone'] ?? '')) ?>" target="_blank" rel="noopener">
-                                <i class="bi bi-whatsapp"></i> <?= escape(maskPhone($m['whatsapp_phone'] ?? '')) ?>
+                                <i class="bi bi-whatsapp"></i> <?= escape($m['whatsapp_phone'] ?? '') ?>
                             </a>
                         </div>
+                        <?php else: ?>
+                        <div class="small text-muted">
+                            <i class="bi bi-whatsapp"></i> <?= escape(maskPhone($m['whatsapp_phone'] ?? '')) ?>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     <i class="bi bi-chat-dots text-muted"></i>
                 </div>

@@ -76,6 +76,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'send') {
         echo json_encode(['ok' => false, 'error' => 'Invalid request method.']);
         exit;
     }
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'Invalid session token. Please reload the page.']);
+        exit;
+    }
     
     $receiverId = (int)($_POST['receiver_id'] ?? 0);
     $senderId = $meId; // enforce from session; prevents spoofing
@@ -142,7 +147,12 @@ if ($with <= 0) {
     $with = (int)($stmt->fetchColumn() ?: 0);
 }
 
-$peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? ORDER BY name ASC");
+$isSuperAdmin = ($_SESSION['user_role'] ?? '') === 'super_admin';
+if ($isSuperAdmin) {
+    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? ORDER BY name ASC");
+} else {
+    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND category != 'partner' ORDER BY name ASC");
+}
 $peopleStmt->execute([$meId]);
 $people = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -258,6 +268,7 @@ ob_start();
             <div class="card-footer bg-white">
                 <?php if ($withUser): ?>
                     <form id="sendForm" class="d-flex gap-2">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="receiver_id" value="<?= (int)$with ?>">
                         <input type="hidden" name="sender_id" value="<?= (int)$meId ?>">
                         <input type="hidden" name="with" value="<?= (int)$with ?>">

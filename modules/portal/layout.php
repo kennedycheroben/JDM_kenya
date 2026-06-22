@@ -37,6 +37,23 @@ if ($user_id > 0) {
     } catch (PDOException $e) {
         error_log("Error getting user details: " . $e->getMessage());
     }
+
+    // Fetch all GBS groups the user belongs to (for sidebar quick access)
+    $user_gbs_groups = [];
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT g.id, g.name, gm.role 
+             FROM gbs_members gm 
+             JOIN gbs_groups g ON gm.gbs_id = g.id 
+             WHERE gm.user_id = ?
+             ORDER BY g.name ASC"
+        );
+        $stmt->execute([$user_id]);
+        $user_gbs_groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error fetching user GBS groups: " . $e->getMessage());
+    }
+    $user_gbs_count = count($user_gbs_groups);
 }
 
 // Dual-role access: allow admin/super_admin to view as member
@@ -84,7 +101,7 @@ function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $curr
     
     // Collect all roles
     if ($user_role === 'super_admin') {
-        $roles[] = ['name' => 'Super Admin', 'color' => '#212529', 'priority' => 5];
+        $roles[] = ['name' => 'JDM Leader', 'color' => '#212529', 'priority' => 5];
     } elseif ($user_role === 'admin') {
         $roles[] = ['name' => 'Admin', 'color' => '#dc3545', 'priority' => 4];
     }
@@ -103,8 +120,10 @@ function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $curr
                 $roles[] = ['name' => 'Associate', 'color' => '#6c757d', 'priority' => 2];
                 break;
             case 'partner':
-                $roles[] = ['name' => 'Member', 'color' => '#0d6efd', 'priority' => 2];
+                $roles[] = ['name' => 'Office Bearer', 'color' => '#fd7e14', 'priority' => 2];
                 break;
+            case 'other':
+                return ['html' => '', 'classes' => '', 'style' => '', 'text' => '', 'roles' => [], 'is_dual' => false];
             default:
                 $roles[] = ['name' => 'Member', 'color' => '#0d6efd', 'priority' => 0];
                 break;
@@ -131,7 +150,7 @@ function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $curr
         $badge_style = "background: linear-gradient(90deg, {$role1['color']} 50%, {$role2['color']} 50%);";
         
         // Shorten text for dual roles
-        $short1 = $role1['name'] === 'Super Admin' ? 'SA' : 
+        $short1 = $role1['name'] === 'JDM Leader' ? 'JDML' : 
                   ($role1['name'] === 'Admin' ? 'Adm' : 
                   ($role1['name'] === 'GBS Leader' ? 'GBSL' : substr($role1['name'], 0, 3)));
         $short2 = $role2['name'] === 'GBS Leader' ? 'GBSL' : substr($role2['name'], 0, 3);
@@ -187,6 +206,12 @@ if (!isset($page_title)) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/JDM_kenya/assets/css/style_dashboard.css">
+    <?php
+    $about_pages = ['about.php','about_ministry.php','about_history_spirit.php','about_inner_feature.php','about_outer_feature.php'];
+    if (in_array($current_page, $about_pages)) {
+        echo '<link rel="stylesheet" href="/JDM_kenya/assets/css/about.css?v=' . filemtime($_SERVER['DOCUMENT_ROOT'] . '/JDM_kenya/assets/css/about.css') . '">';
+    }
+    ?>
     <style>
         :root { --sidebar-width: 250px; }
         @media (min-width: 768px) {
@@ -268,31 +293,22 @@ if (!isset($page_title)) {
             to   { opacity: 1; transform: translateX(0); }
         }
         
-        /* Global smooth transitions */
-        * {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }
+        /* Remove global * transition that kills performance */
         
         /* Smooth scrolling */
         html {
             scroll-behavior: smooth;
         }
         
-        /* Enhanced button transitions */
+        /* Neon button system – overrides from style_dashboard.css handled by CSS variables */
         .btn {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
-        
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px) !important;
         }
-        
         .btn:active {
-            transform: translateY(0);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transform: translateY(0) !important;
         }
         
         /* Card hover effects */
@@ -477,9 +493,11 @@ if (!isset($page_title)) {
                 <button type="button" class="btn-close btn-close-white me-2" data-bs-dismiss="offcanvas" data-bs-target="#sidebarMenu" aria-label="Close"></button>
             </div>
             <div class="offcanvas-body flex-column w-100 p-0">
-                <div class="w-100 d-flex flex-column align-items-center py-4" style="background: #027916;">
-                    <img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Kenya Logo" style="width:110px; height:110px; object-fit:contain; background:white; border-radius:50%; box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:10px;">
-                    <h4 class="fw-bold text-white mb-2" style="letter-spacing:1px;">JDM Kenya</h4>
+                <div class="w-100 d-flex flex-column align-items-center py-4" style="background: #079c28;">
+                    <a href="<?php echo $is_admin ? '/JDM_kenya/admin_dashboard.php' : '/JDM_kenya/member_dashboard.php'; ?>" class="d-flex flex-column align-items-center text-decoration-none">
+                        <img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Kenya Logo" style="width:110px; height:110px; object-fit:contain; background:white; border-radius:50%; box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:10px;">
+                        <h4 class="fw-bold text-white mb-2" style="letter-spacing:1px;">JDM Kenya</h4>
+                    </a>
                 </div>
                 <ul class="nav flex-column w-100 px-3">
                 <li class="nav-item mb-2">
@@ -494,10 +512,15 @@ if (!isset($page_title)) {
                             <i class="bi bi-people"></i> Members
                         </a>
                     </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link text-white" href="/JDM_kenya/profile.php">
+                            <i class="bi bi-person-circle"></i> My Profile
+                        </a>
+                    </li>
                     <?php if($is_super_admin): ?>
                         <li class="nav-item mb-2">
                             <a class="nav-link text-white" href="super_admin_dashboard.php">
-                                <i class="bi bi-shield-lock"></i> Super Admin
+                                <i class="bi bi-shield-lock"></i> JDM Leader
                             </a>
                         </li>
                     <?php endif; ?>
@@ -521,16 +544,26 @@ if (!isset($page_title)) {
                             <i class="bi bi-images"></i> Gallery
                         </a>
                     </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link text-white" href="admin_dashboard.php?tab=messages">
+                            <i class="bi bi-envelope"></i> Contact Messages
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link text-white" href="sports_admin.php">
+                            <i class="bi bi-trophy-fill text-warning"></i> Sports Admin
+                        </a>
+                    </li>
 
                 <?php else: ?>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="member_dashboard.php">
-                            <i class="bi bi-grid"></i> Member Dashboard
+                        <a class="nav-link text-white" href="/JDM_kenya/profile.php">
+                            <i class="bi bi-person-circle"></i> My Profile
                         </a>
                     </li>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white" href="directory.php">
-                            <i class="bi bi-people"></i> Directory
+                            <i class="bi bi-people"></i> JDM Members
                         </a>
                     </li>
                     <li class="nav-item mb-2">
@@ -565,11 +598,57 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="about.php">
-                            <i class="bi bi-info-circle"></i> About
+                        <a class="nav-link text-white" href="sports.php">
+                            <i class="bi bi-trophy"></i> Sports Ministry
                         </a>
+                    </li>                    
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white" href="about.php">
+                        <i class="bi bi-info-circle"></i> About
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <!-- User GBS groups quick access -->
+                <?php if (!empty($user_gbs_groups)): ?>
+                    <li class="nav-item mb-2 px-1">
+                        <small class="text-white-50 px-3 fw-bold text-uppercase" style="font-size: 0.65rem;">My Groups</small>
+                        <ul class="list-unstyled ms-3 mb-3">
+                            <?php foreach ($user_gbs_groups as $g): ?>
+                                <li class="mb-1">
+                                    <a class="nav-link text-white d-flex align-items-center p-0" href="gbs_group.php?id=<?= (int)$g['id'] ?>">
+                                        <i class="bi bi-people-fill me-2"></i>
+                                        <span class="text-white"><?= htmlspecialchars($g['name']) ?></span>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
                     </li>
                 <?php endif; ?>
+
+                <!-- Curated quick links + site map -->
+                <li class="nav-item mb-2 px-1">
+                    <small class="text-white-50 px-3 fw-bold text-uppercase" style="font-size: 0.65rem;">Quick Links</small>
+                    <ul class="list-unstyled ms-3 mb-3">
+                        <?php $quick_pages = [
+                            'index.php' => 'Home',
+                            'about.php' => 'About',
+                            'activities.php' => 'Activities',
+                            'sports.php' => 'Sports',
+                            'prayer_wall.php' => 'Prayer Wall',
+                            'resources.php' => 'Resources',
+                            'gallery.php' => 'Gallery',
+                            'news_room.php' => 'Newsroom',
+                            'directory.php' => 'Members',
+                            'contact.php' => 'Contact',
+                            'gbs_dashboard.php' => 'Groups'
+                        ]; ?>
+                        <?php foreach ($quick_pages as $p => $label): ?>
+                            <li class="mb-1"><a class="nav-link text-white p-0" href="<?= $p ?>"><?= $label ?></a></li>
+                        <?php endforeach; ?>
+                        
+                    </ul>
+                </li>
 
                 <li class="nav-item mt-3 mb-1">
                     <div class="sidebar-divider"></div>
@@ -676,7 +755,7 @@ if (!isset($page_title)) {
                                 <i class="bi bi-star-fill"></i> You have been appointed as a GBS Leader.
                             </div>
                             <div class="small mb-0">
-                                Use the button below or the sidebar shortcut to enter your GBS Leader dashboard and manage your group, members, resources, and announcements.
+                                Use the button below or the sidebar shortcut to enter your GBS Leader dashboard and manage your group, members, resources and announcements.
                             </div>
                         </div>
                         <a href="<?= $gbs_leader_switch_url ?>" class="btn btn-warning btn-lg text-dark fw-bold flex-shrink-0">
@@ -700,7 +779,13 @@ if (!isset($page_title)) {
             <div class="row align-items-start">
                 <div class="col-12 col-md-6 text-center text-md-start mb-4 mb-md-0">
                     <p class="mb-1 fw-semibold">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
-                    <p class="mb-0 small">Building a discipleship movement with faith, clarity, and service.</p>
+                    <p class="mb-0 small">Discipleship, Evangelism, World Mission</p>
+                    <p class="mb-3 small">Go and Make Disciples!</p>
+                    <div class="d-flex gap-3 justify-content-center justify-content-md-start">
+                        <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="text-white opacity-75" title="Facebook"><i class="bi bi-facebook fs-5"></i></a>
+                        <a href="#" target="_blank" class="text-white opacity-75" title="Instagram"><i class="bi bi-instagram fs-5"></i></a>
+                        <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="text-white opacity-75" title="TikTok"><i class="bi bi-tiktok fs-5"></i></a>
+                    </div>
                 </div>
                 <div class="col-12 col-md-6 d-flex flex-column align-items-center align-items-md-end">
                     <div class="fw-semibold mb-3">Quick Links</div>
@@ -708,6 +793,7 @@ if (!isset($page_title)) {
                         <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="index.php">Home</a></li>
                         <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="about.php">About Us</a></li>
                         <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="activities.php">Activities</a></li>
+                        <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="sports.php">Sports Ministry</a></li>
                         <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="prayer_wall.php">Prayer Wall</a></li>
                         <li><a class="text-white text-decoration-none opacity-75" href="contact.php">Contact Support</a></li>
                     </ul>

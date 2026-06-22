@@ -527,3 +527,375 @@ main {
 .page-hero .lead {
   font-size: 1.1rem;
 }
+
+/* Auth pages: Forgot/Reset password styles (moved from inline) */
+.auth-page {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-page .recovery-container {
+  max-width: 450px;
+  width: 100%;
+  margin: 0 auto;
+}
+.auth-page .recovery-card {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+.auth-page .recovery-card-header {
+  background: var(--default-color, #102a54);
+  color: white;
+  padding: 24px;
+  text-align: center;
+}
+.auth-page .recovery-card-header h3 {
+  margin: 0;
+  font-size: 22px;
+  color: white;
+}
+.auth-page .recovery-card-header p {
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  opacity: 0.9;
+}
+.auth-page .recovery-card-body {
+  padding: 32px;
+}
+.auth-page .form-label {
+  font-weight: 500;
+  color: var(--heading-color, #102a54);
+  margin-bottom: 8px;
+}
+.auth-page .form-control {
+  border: 1px solid #dee2e6;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 15px;
+}
+.auth-page .form-control:focus {
+  border-color: var(--accent-color, #d4af37);
+  box-shadow: 0 0 0 0.2rem rgba(212, 175, 55, 0.25);
+}
+.auth-page .btn-primary {
+  background: var(--default-color, #102a54);
+  border: none;
+  padding: 10px 24px;
+  font-weight: 500;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+.auth-page .btn-primary:hover {
+  background: var(--accent-color, #d4af37);
+  color: var(--default-color, #102a54);
+}
+.auth-page .recovery-footer {
+  text-align: center;
+  padding-top: 16px;
+  border-top: 1px solid #dee2e6;
+}
+.auth-page .recovery-footer a {
+  color: var(--default-color, #102a54);
+  text-decoration: none;
+  font-size: 14px;
+}
+.auth-page .recovery-footer a:hover {
+  text-decoration: underline;
+}
+.auth-page .alert {
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+.auth-page .alert-info {
+  background: #cfe2ff;
+  border: 1px solid #b6d4fe;
+  color: #084298;
+}
+.auth-page .development-link {
+  background: #fff3cd;
+  border: 1px solid #ffecb5;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 12px;
+}
+.auth-page .development-link a {
+  word-break: break-all;
+  font-size: 12px;
+  color: #856404;
+}
+
+/* ── Refined Neon Button (`.btn-neon`) ── */
+.btn-neon {
+  --btn-accent: #099a02;
+  position: relative;
+  padding: 14px 36px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--btn-accent);
+  border: 2px solid var(--btn-accent);
+  background-color: transparent;
+  overflow: hidden;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.4s ease;
+  border-radius: 8px;
+  z-index: 1;
+}
+.btn-neon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--btn-accent);
+  z-index: -1;
+  box-shadow: 0 6px 14px rgba(10, 119, 108, 0.9), 0 0 18px rgba(168,255,0,0.55) inset;
+  transition: left 0.5s ease;
+  border-radius: inherit;
+}
+.btn-neon:hover {
+  color: #000;
+  letter-spacing: 2px;
+  box-shadow: 0 6px 14px rgba(3, 5, 136, 0.9), 0 0 18px rgba(168,255,0,0.55);
+  transform: translateY(-2px);
+}
+.btn-neon:hover::before {
+  left: 0;
+}
+.btn-neon:active {
+  transform: translateY(0);
+}
+
+/* ── Global Neon Button System ──
+   Applies neon slide-in effect to all Bootstrap `.btn` elements site-wide.
+   Uses --btn-accent CSS variable so each color variant can keep its own hue. */
+
+.btn {
+  --btn-accent: #063284;
+  position: relative;
+  padding: 10px 26px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--btn-accent);
+  border: 2px solid var(--btn-accent);
+  background-color: transparent;
+  overflow: hidden;
+  transition: all 0.35s ease;
+  border-radius: 6px;
+  z-index: 1;
+}
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--btn-accent);
+  z-index: -1;
+  transition: left 0.4s ease;
+  border-radius: inherit;
+}
+.btn:hover {
+  color: #000;
+  box-shadow: 0 0 6px var(--btn-accent), 0 0 20px var(--btn-accent);
+  transform: translateY(-2px);
+}
+.btn:hover::before {
+  left: 0;
+}
+.btn:active {
+  transform: translateY(0);
+}
+
+/* Size variants */
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+}
+.btn-lg {
+  padding: 12px 32px;
+  font-size: 1.05rem;
+}
+
+/* Color variants – each sets its own accent hue */
+.btn-primary { --btn-accent: #1524ad; }
+.btn-secondary { --btn-accent: #adb5bd; }
+.btn-success { --btn-accent: #28a745; }
+.btn-danger { --btn-accent: #dc3545; }
+.btn-warning { --btn-accent: #ffc107; }
+.btn-info { --btn-accent: #17a2b8; }
+.btn-light { --btn-accent: #f8f9fa; color: #333; }
+.btn-dark { --btn-accent: #343a40; }
+
+.btn-outline-primary { --btn-accent: #0d459a; }
+.btn-outline-secondary { --btn-accent: #adb5bd; }
+.btn-outline-success { --btn-accent: #28a745; }
+.btn-outline-danger { --btn-accent: #dc3545; }
+.btn-outline-warning { --btn-accent: #ffc107; }
+.btn-outline-info { --btn-accent: #17a2b8; }
+.btn-outline-light { --btn-accent: #f8f9fa; color: #fff; }
+.btn-outline-dark { --btn-accent: #343a40; }
+
+/* .btn-link – inline, no neon border/background */
+.btn-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--btn-accent, #ffffff);
+}
+
+/* ── Auth-page overrides (keep existing look) ── */
+.auth-page .btn-primary {
+  color: #fff;
+  border-color: var(--default-color, #102a54);
+  background: var(--default-color, #2f71db);
+}
+.auth-page .btn-primary::before { display: none; }
+.auth-page .btn-primary:hover {
+  background: var(--accent-color, #d4af37);
+  color: var(--default-color, #102a54);
+  border-color: var(--accent-color, #d4af37);
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── Hero header outline buttons ── */
+.hero-header .btn-outline-light {
+  --btn-accent: #ffffff;
+  color: #fff;
+}
+
+/* ── Dark-mode overrides ── */
+.dark-mode .btn-outline-primary {
+  color: #e9edf5;
+  border-color: rgba(255, 255, 255, 0.34);
+}
+.dark-mode .btn-outline-primary:hover {
+  color: #000;
+}
+
+/* Optional wrapper for dark background demo (use on a container, not global body) */
+.neon-area {
+  background-color: #0a0a0a;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  border-radius: 8px;
+}
+
+.nav.nav-pills .btn-neon {
+  padding: 8px 18px;
+  border-radius: 24px;
+  color: #ffffff !important;
+  border: 2px solid #008cff !important;
+  background: #2c5e9e !important;
+  box-shadow: none;
+  position: relative;
+  display: inline-flex !important;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 1;
+}
+.nav.nav-pills .btn-neon .bi {
+  margin-right: 8px;
+  color: inherit;
+}
+.nav.nav-pills .btn-neon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: #028f75;
+  z-index: -1;
+  box-shadow: 0 6px 18px rgba(168,255,0,0.5), 0 0 8px rgba(168,255,0,0.18) inset;
+  transition: left 0.45s cubic-bezier(.2,.8,.2,1);
+  border-radius: 24px;
+}
+.nav.nav-pills .btn-neon:hover,
+.nav.nav-pills .btn-neon:focus,
+.nav.nav-pills .btn-neon.active {
+  color: #000 !important;
+  box-shadow: 0 6px 14px rgba(168,255,0,0.9), 0 0 18px rgba(168,255,0,0.55);
+}
+.nav.nav-pills .btn-neon:hover::before,
+.nav.nav-pills .btn-neon.active::before {
+  left: 0;
+}
+
+/* Strong visibility/layout override for about sub-navigation to prevent accidental hiding */
+.nav.nav-pills.justify-content-center.justify-content-lg-start {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 0.6rem !important;
+  width: 100% !important;
+  overflow: visible !important;
+}
+.nav.nav-pills.justify-content-center.justify-content-lg-start .nav-item {
+  display: inline-block !important;
+}
+.nav.nav-pills.justify-content-center.justify-content-lg-start .btn-neon {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure about submenu anchors that use about-nav-link match the requested neon button styles */
+.about-nav-link,
+.about-nav-link.btn-neon {
+  position: relative;
+  padding: 16px 40px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #a8ff00 !important;
+  border: 2px solid #a8ff00 !important;
+  background-color: transparent !important;
+  overflow: hidden;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.6s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  text-decoration: none;
+}
+.about-nav-link::before,
+.about-nav-link.btn-neon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: #a8ff00;
+  z-index: -1;
+  box-shadow: 0 0 50px #a8ff00, 0 0 50px #a8ff00 inset;
+  transition: left 0.6s ease;
+}
+.about-nav-link:hover,
+.about-nav-link.btn-neon:hover {
+  color: #000 !important;
+  letter-spacing: 5px;
+  border-radius: 10px;
+  box-shadow: 0 0 8px #a8ff00, 0 0 25px #a8ff00, 0 0 50px #a8ff00;
+}
+.about-nav-link:hover::before,
+.about-nav-link.btn-neon:hover::before {
+  left: 0;
+}
+
+

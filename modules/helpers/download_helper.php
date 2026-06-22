@@ -1,22 +1,19 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
 
-// Security: Only allow logged-in users for certain file types
-$allowPublicAccess = true;
-if (!empty($_SESSION['user_role'])) {
-    $allowPublicAccess = false;
-}
-
 // Get file path from request
 $filePath = $_GET['file'] ?? '';
 $fileName = $_GET['name'] ?? basename($filePath);
+$filePath = str_replace('\\', '/', $filePath);
+$filePath = preg_replace('#^https?://[^/]+#i', '', $filePath);
+$filePath = preg_replace('#^/JDM_kenya/#', '', $filePath);
+$filePath = ltrim($filePath, '/');
 
 // Security: Validate file path to prevent directory traversal
 $allowedDirectories = [
-    '/uploads/',
-    '/assets/',
-    '/JDM_kenya/uploads/',
-    '/JDM_kenya/assets/'
+    'uploads/',
+    'assets/',
+    'images/',
 ];
 
 $isValidPath = false;
@@ -35,11 +32,11 @@ if (!$isValidPath || empty($filePath)) {
 }
 
 // Convert relative path to absolute path
-$absolutePath = realpath(__DIR__ . '/../../' . ltrim($filePath, '/'));
+$absolutePath = realpath(__DIR__ . '/../../' . $filePath);
 $basePath = realpath(__DIR__ . '/../../');
 
 // Additional security: Ensure file is within allowed base path
-if (strpos($absolutePath, $basePath) !== 0 || !file_exists($absolutePath)) {
+if ($absolutePath === false || $basePath === false || strpos($absolutePath, $basePath) !== 0 || !file_exists($absolutePath)) {
     http_response_code(404);
     header('Content-Type: application/json');
     echo json_encode(['error' => 'File not found']);
@@ -69,17 +66,13 @@ if (!in_array($fileExtension, $allowedExtensions)) {
 
 // Set appropriate headers for download
 header('Content-Type: ' . $mimeType);
-header('Content-Disposition: attachment; filename="' . htmlspecialchars($fileName) . '"');
+header('Content-Disposition: attachment; filename="' . safeDownloadName($fileName, $fileExtension) . '"');
 header('Content-Length: ' . $fileSize);
 header('Cache-Control: private, no-cache, no-store, must-revalidate');
 header('Pragma: no-cache');
 header('Expires: 0');
-
-// Security: Prevent hotlinking
-if (!$allowPublicAccess) {
-    header('X-Content-Type-Options: nosniff');
-    header('X-Frame-Options: DENY');
-}
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
 
 // Read and output file
 readfile($absolutePath);
@@ -112,5 +105,21 @@ function getMimeType($extension) {
     ];
     
     return $mimeTypes[$extension] ?? 'application/octet-stream';
+}
+
+function safeDownloadName($fileName, $extension) {
+    $baseName = basename((string)$fileName);
+    $baseName = preg_replace('/[^a-zA-Z0-9._ -]/', '_', $baseName);
+    $baseName = trim($baseName, " .\t\n\r\0\x0B");
+
+    if ($baseName === '') {
+        $baseName = 'download';
+    }
+
+    if (strtolower(pathinfo($baseName, PATHINFO_EXTENSION)) !== $extension) {
+        $baseName .= '.' . $extension;
+    }
+
+    return str_replace('"', '', $baseName);
 }
 ?>

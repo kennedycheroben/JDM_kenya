@@ -4,6 +4,8 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/contact_messages.php';
+require_once dirname(__FILE__) . '/../../core/downloads.php';
 
 if (empty($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['admin', 'super_admin'])) {
     header('Location: login.php');
@@ -13,8 +15,11 @@ if (empty($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['admin',
 $message = '';
 $tab = isset($_GET['tab']) ? $_GET['tab'] : 'dashboard';
 
+ensureContactMessagesTable($pdo);
+
 // Handle form submissions
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_csrf();
     $action = $_POST['action'] ?? '';
 
     if ($action === 'add_activity') {
@@ -153,6 +158,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
         }
     }
+
+    if ($action === 'mark_contact_read') {
+        $id = (int)($_POST['contact_message_id'] ?? 0);
+        if ($id > 0) {
+            $stmt = $pdo->prepare("UPDATE contact_messages SET status = 'read', read_at = COALESCE(read_at, NOW()) WHERE id = ?");
+            $stmt->execute([$id]);
+            $message = 'Contact message marked as read.';
+            $tab = 'messages';
+        }
+    }
+
+    if ($action === 'delete_contact_message') {
+        $id = (int)($_POST['contact_message_id'] ?? 0);
+        if ($id > 0) {
+            $stmt = $pdo->prepare('DELETE FROM contact_messages WHERE id = ?');
+            $stmt->execute([$id]);
+            $message = 'Contact message deleted.';
+            $tab = 'messages';
+        }
+    }
 }
 
 // Fetch data
@@ -160,6 +185,8 @@ $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchA
 $resources = $pdo->query('SELECT * FROM resources ORDER BY upload_date DESC')->fetchAll(PDO::FETCH_ASSOC);
 $announcements = $pdo->query('SELECT *, COALESCE(date_created, date_posted) AS date_created_safe FROM announcements ORDER BY COALESCE(date_created, date_posted) DESC LIMIT 20')->fetchAll(PDO::FETCH_ASSOC);
 $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at DESC LIMIT 20')->fetchAll(PDO::FETCH_ASSOC);
+$contactMessages = $pdo->query('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 100')->fetchAll(PDO::FETCH_ASSOC);
+$unreadContactMessages = (int)$pdo->query("SELECT COUNT(*) FROM contact_messages WHERE status = 'unread'")->fetchColumn();
 
 // Get editing activity
 $editing = null;
@@ -176,7 +203,7 @@ ob_start();
 <!-- Page Header -->
 <div class="row mb-4">
     <div class="col-md-12">
-        <h2><img src="jdm_logo.png" alt="Logo"> Admin Dashboard</h2>
+        <h2><img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Logo" class="logo-img" style="height: 40px; width: auto;"> Admin Dashboard</h2>
         <p class="text-muted">Manage portal content, members, and resources</p>
     </div>
 </div>
@@ -214,6 +241,12 @@ if (isset($_GET['new_admin']) && $is_link_valid):
             </a>
             <a href="admin_dashboard.php?tab=gallery" class="btn btn-<?= $tab === 'gallery' ? 'primary' : 'outline-primary' ?>">
                 <i class="bi bi-images"></i> Gallery
+            </a>
+            <a href="admin_dashboard.php?tab=messages" class="btn btn-<?= $tab === 'messages' ? 'primary' : 'outline-primary' ?>">
+                <i class="bi bi-envelope"></i> Messages
+                <?php if ($unreadContactMessages > 0): ?>
+                    <span class="badge bg-danger ms-1"><?= $unreadContactMessages ?></span>
+                <?php endif; ?>
             </a>
         </div>
     </div>
@@ -265,6 +298,14 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                 <p>Photos</p>
             </div>
         </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card">
+                <i class="bi bi-envelope text-primary"></i>
+                <h5>Contact Messages</h5>
+                <h3 class="text-primary"><?= $unreadContactMessages ?></h3>
+                <p>Unread messages</p>
+            </div>
+        </div>
     </div>
     <div class="row mt-4">
         <div class="col-md-12">
@@ -282,6 +323,9 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                     <a href="admin_dashboard.php?tab=resources" class="btn btn-success me-2 mb-2">
                         <i class="bi bi-upload"></i> Upload Resource
                     </a>
+                    <a href="admin_dashboard.php?tab=messages" class="btn btn-outline-primary me-2 mb-2">
+                        <i class="bi bi-envelope"></i> View Messages
+                    </a>
                 </div>
             </div>
         </div>
@@ -298,6 +342,7 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                 </div>
                 <div class="card-body">
                     <form method="post" class="needs-validation">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="action" value="<?= $editing ? 'update_activity' : 'add_activity' ?>">
                         <?php if ($editing): ?>
                             <input type="hidden" name="activity_id" value="<?= $editing['id'] ?>">
@@ -345,7 +390,7 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                                 <div class="col-md-6 col-lg-4">
                                     <div class="card h-100 shadow-sm">
                                         <?php if ($activity['image']): ?>
-                                            <img src="<?= htmlspecialchars($activity['image']) ?>" class="card-img-top" alt="Activity" style="height: 150px; object-fit: cover;">
+                                            <img src="<?= escape($activity['image']) ?>" class="card-img-top" alt="Activity" style="height: 150px; object-fit: cover;">
                                         <?php else: ?>
                                             <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
                                                 <i class="bi bi-calendar-event text-secondary" style="font-size: 2rem;"></i>
@@ -360,8 +405,11 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                                             <a href="admin_dashboard.php?tab=activities&edit=<?= $activity['id'] ?>" class="btn btn-sm btn-primary">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </a>
-                                            <form method="post" style="display: inline;">
+                                                                                        <form method="post" style="display: inline;">
+                                                <?= csrf_field() ?>
                                                 <input type="hidden" name="action" value="delete_activity">
+
+                                            
                                                 <input type="hidden" name="activity_id" value="<?= $activity['id'] ?>">
                                                 <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete?')">
                                                     <i class="bi bi-trash"></i> Delete
@@ -393,6 +441,7 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                 </div>
                 <div class="card-body">
                     <form method="post" enctype="multipart/form-data">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="action" value="upload_resource">
                         <div class="mb-3">
                             <label class="form-label">Resource Title</label>
@@ -449,7 +498,7 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                                             <td><span class="badge bg-light text-dark border"><?= escape($resource['category'] ?? 'pdf_resource') ?></span></td>
                                             <td><?= date('M d, Y', strtotime($resource['upload_date'])) ?></td>
                                             <td>
-                                                <a href="<?= escape($resource['file_path']) ?>" class="btn btn-sm btn-primary" download>
+                                                <a href="<?= escape(download_url($resource['file_path'], $resource['title'])) ?>" class="btn btn-sm btn-primary">
                                                     <i class="bi bi-download"></i> Download
                                                 </a>
                                             </td>
@@ -477,6 +526,7 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                 </div>
                 <div class="card-body">
                     <form method="post">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="action" value="add_announcement">
                         <div class="mb-3">
                             <label class="form-label">Title</label>
@@ -517,6 +567,86 @@ if (isset($_GET['new_admin']) && $is_link_valid):
     </div>
 <?php endif; ?>
 
+<!-- Contact Messages Tab -->
+<?php if ($tab === 'messages'): ?>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+                    <h5 class="mb-0"><i class="bi bi-envelope"></i> Contact Messages</h5>
+                    <span class="badge bg-light text-primary"><?= $unreadContactMessages ?> unread</span>
+                </div>
+                <div class="card-body">
+                    <?php if (count($contactMessages) > 0): ?>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Sender</th>
+                                        <th>Subject</th>
+                                        <th>Message</th>
+                                        <th>Received</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($contactMessages as $contactMessage): ?>
+                                        <tr class="<?= $contactMessage['status'] === 'unread' ? 'table-warning' : '' ?>">
+                                            <td>
+                                                <?php if ($contactMessage['status'] === 'unread'): ?>
+                                                    <span class="badge bg-danger">Unread</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Read</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <strong><?= escape($contactMessage['name']) ?></strong><br>
+                                                <a href="mailto:<?= escape($contactMessage['email']) ?>" class="small text-decoration-none">
+                                                    <?= escape($contactMessage['email']) ?>
+                                                </a>
+                                            </td>
+                                            <td><?= escape($contactMessage['subject']) ?></td>
+                                            <td style="min-width: 280px;">
+                                                <?= nl2br(escape($contactMessage['message'])) ?>
+                                            </td>
+                                            <td><?= date('M d, Y H:i', strtotime($contactMessage['created_at'])) ?></td>
+                                            <td class="text-end">
+                                                <div class="d-flex gap-2 justify-content-end">
+                                                    <?php if ($contactMessage['status'] === 'unread'): ?>
+                                                        <form method="post">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="action" value="mark_contact_read">
+                                                            <input type="hidden" name="contact_message_id" value="<?= (int)$contactMessage['id'] ?>">
+                                                            <button type="submit" class="btn btn-sm btn-outline-success">
+                                                                <i class="bi bi-check2-circle"></i> Mark Read
+                                                            </button>
+                                                        </form>
+                                                    <?php endif; ?>
+                                                    <form method="post" onsubmit="return confirm('Delete this contact message?');">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="delete_contact_message">
+                                                        <input type="hidden" name="contact_message_id" value="<?= (int)$contactMessage['id'] ?>">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                            <i class="bi bi-trash"></i> Delete
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-info mb-0">No contact messages yet.</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- Gallery Tab -->
 <?php if ($tab === 'gallery'): ?>
     <div class="row">
@@ -526,8 +656,11 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                     <h5 class="mb-0"><i class="bi bi-upload"></i> Upload Gallery Image</h5>
                 </div>
                 <div class="card-body">
-                    <form method="post" enctype="multipart/form-data">
+                                        <form method="post" enctype="multipart/form-data">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="action" value="upload_gallery">
+
+                    
                         <div class="mb-3">
                             <label class="form-label">Image Title (Optional)</label>
                             <input type="text" name="gallery_title" class="form-control" placeholder="e.g. Conference 2026">
