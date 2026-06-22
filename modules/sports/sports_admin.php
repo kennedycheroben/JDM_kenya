@@ -160,7 +160,7 @@ ob_start();
                 <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Player Stats (Leaderboard)</h5>
             </div>
             <div class="card-body">
-                <p class="text-muted small">Update goals, assists, and MVP awards. These will be added to the player's existing tally.</p>
+                <p class="text-muted small">Update goals, assists, and MOM awards. These will be added to the player's existing tally.</p>
                 <form method="POST">
                     <?= csrf_field() ?>
                     <div class="mb-3">
@@ -182,7 +182,7 @@ ob_start();
                             <input type="number" name="assists" class="form-control" value="0" min="0">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold">Add MVP</label>
+                            <label class="form-label fw-semibold">Add MOM</label>
                             <input type="number" name="mvp_awards" class="form-control" value="0" min="0">
                         </div>
                     </div>
