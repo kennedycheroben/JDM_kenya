@@ -73,7 +73,7 @@ if ($reset_success) {
     <title>JDM Kenya | Sign In</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
 </head>
 <body>
 <div class="container py-5">
@@ -128,6 +128,6 @@ if ($reset_success) {
 <div id="preloader"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
-<script src="/JDM_kenya/assets/js/ui_animations.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
 </body>
 </html>

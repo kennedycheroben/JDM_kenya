@@ -34,7 +34,7 @@ if ($member && $member['category'] === 'partner' && (!isset($member['is_approved
         <title>Pending Approval | JDM Kenya</title>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-        <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css">
+        <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
         <style>
             body {
                 background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -216,7 +216,7 @@ ob_start();
 <!-- Page Header -->
 <div class="row mb-4">
     <div class="col-md-12">
-        <h2><img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Logo" class="logo-img" style="height: 40px; width: auto;"> Member Dashboard</h2>
+        <h2><img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Logo" class="logo-img" style="height: 40px; width: auto;"> Member Dashboard</h2>
         <p class="text-muted">Access your resources and stay updated with JDM Kenya</p>
     </div>
 </div>

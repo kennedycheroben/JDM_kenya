@@ -5,7 +5,7 @@ require_once dirname(__FILE__) . '/../../core/contact_messages.php';
 if (!function_exists('redirectToContact')) {
     function redirectToContact($query = '')
     {
-        $location = '/JDM_kenya/contact.php' . $query;
+        $location = BASE_PATH . '/contact.php' . $query;
         header('Location: ' . $location);
         exit;
     }

@@ -400,7 +400,8 @@ class YouTubeStyleVideoPlayer {
         if (!this.userId) return;
         
         try {
-            const response = await fetch(`/JDM_kenya/modules/api/video_progress.php?action=get&video_id=${videoId}&user_id=${this.userId}`);
+            const base = (typeof window.BASE_PATH !== 'undefined') ? window.BASE_PATH : '';
+            const response = await fetch(`${base}/modules/api/video_progress.php?action=get&video_id=${videoId}&user_id=${this.userId}`);
             const data = await response.json();
             
             if (data.success && data.progress) {
@@ -436,7 +437,8 @@ class YouTubeStyleVideoPlayer {
             formData.append('current_time', currentTime);
             formData.append('duration', duration);
             
-            await fetch('/JDM_kenya/modules/api/video_progress.php', {
+            const base = (typeof window.BASE_PATH !== 'undefined') ? window.BASE_PATH : '';
+            await fetch(`${base}/modules/api/video_progress.php`, {
                 method: 'POST',
                 body: formData
             });
@@ -454,7 +456,8 @@ class YouTubeStyleVideoPlayer {
             formData.append('video_id', videoId);
             formData.append('user_id', this.userId);
             
-            await fetch('/JDM_kenya/modules/api/video_progress.php', {
+            const base = (typeof window.BASE_PATH !== 'undefined') ? window.BASE_PATH : '';
+            await fetch(`${base}/modules/api/video_progress.php`, {
                 method: 'POST',
                 body: formData
             });

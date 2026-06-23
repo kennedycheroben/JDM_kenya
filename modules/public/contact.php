@@ -19,14 +19,14 @@ function navActive($page) {
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css">
-    <link rel="icon" type="image/png" href="/JDM_kenya/images/jdm_logo.png">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
+    <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/images/jdm_logo.png">
 </head>
 <body>
 <header id="header" class="header fixed-top">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
         <a href="index.php" class="logo d-flex align-items-center">
-            <img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img" style="height: 40px; width: auto;">
+            <img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img" style="height: 40px; width: auto;">
             <h1 class="sitename ms-2">JDM Kenya</h1>
         </a>
         <nav id="navmenu" class="navmenu">
@@ -50,7 +50,7 @@ function navActive($page) {
 </header>
 
 <!-- Hero Banner with Background -->
-<section class="page-hero" style="background: linear-gradient(135deg, rgba(16,42,84,0.85) 0%, rgba(18,35,65,0.75) 100%), url('/JDM_kenya/images/hero-bg.jpeg') center/cover no-repeat fixed; height: 40vh;">
+<section class="page-hero" style="background: linear-gradient(135deg, rgba(16,42,84,0.85) 0%, rgba(18,35,65,0.75) 100%), url('<?= BASE_PATH ?>/images/hero-bg.jpeg') center/cover no-repeat fixed; height: 40vh;">
     <div class="container h-100 d-flex align-items-center justify-content-center">
         <div class="text-center text-white">
             <h1 class="display-4 fw-bold mb-2" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">Contact Us</h1>
@@ -113,7 +113,7 @@ function navActive($page) {
                         <?php elseif (isset($_GET['error'])): ?>
                             <div class="alert alert-danger">Please fill in all fields correctly.</div>
                         <?php endif; ?>
-                       <form method="post" action="/JDM_kenya/contact_process.php">
+                       <form method="post" action="<?= BASE_PATH ?>/contact_process.php">
                             <?= csrf_field() ?>
                             <div class="row gy-3">
                                 <div class="col-md-6">
@@ -158,6 +158,6 @@ function navActive($page) {
 <div id="preloader"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
-<script src="/JDM_kenya/assets/js/ui_animations.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
 </body>
 </html>

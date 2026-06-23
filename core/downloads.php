@@ -5,7 +5,7 @@ if (!function_exists('download_url')) {
         $filePath = (string)($filePath ?? '');
         $fileName = (string)($fileName ?? 'download');
 
-        return '/JDM_kenya/modules/helpers/download_helper.php?file='
+        return BASE_PATH . '/modules/helpers/download_helper.php?file='
             . rawurlencode($filePath)
             . '&name='
             . rawurlencode($fileName);

@@ -19,14 +19,14 @@ function navActive($page) {
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/JDM_kenya/assets/css/style.css') ?>">
-    <link rel="icon" type="image/png" href="/JDM_kenya/images/jdm_logo.png">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/css/style.css') ?>">
+    <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/images/jdm_logo.png">
 </head>
 <body>
 <header id="header" class="header fixed-top hero-header">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
         <a href="index.php" class="logo d-flex align-items-center">
-            <img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img" style="height: 40px; width: auto;">
+            <img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img" style="height: 40px; width: auto;">
             <h1 class="sitename ms-2">JDM Kenya</h1>
         </a>
         <nav id="navmenu" class="navmenu">
@@ -50,7 +50,7 @@ function navActive($page) {
 </header>
 
 <main>
-    <section class="hero-landing position-relative d-flex align-items-center justify-content-start overflow-hidden" style="background: linear-gradient(135deg, rgba(139, 179, 243, 0.85) 0%, rgba(18,35,65,0.75) 100%), url('/JDM_kenya/images/hero-bg.jpeg') center/cover no-repeat fixed; height: 100vh; width: 100%;">
+    <section class="hero-landing position-relative d-flex align-items-center justify-content-start overflow-hidden" style="background: linear-gradient(135deg, rgba(139, 179, 243, 0.85) 0%, rgba(18,35,65,0.75) 100%), url('<?= BASE_PATH ?>/images/hero-bg.jpeg') center/cover no-repeat fixed; height: 100vh; width: 100%;">
         <div class="container-fluid h-100">
             <div class="row h-100 align-items-center">
                 <div class="col-lg-5 ps-lg-5 text-white z-1">
@@ -95,7 +95,7 @@ function navActive($page) {
 <div id="preloader"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
-<script src="/JDM_kenya/assets/js/ui_animations.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
 <script>
 // Typing Effect
 const phrases = ['Multiplication', 'Community', 'Mission'];

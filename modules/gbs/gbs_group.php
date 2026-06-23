@@ -286,7 +286,7 @@ ob_start();
                                         <td><?= escape($resource['uploader_name']) ?></td>
                                         <td><?= date('M d, Y', strtotime($resource['uploaded_at'])) ?></td>
                                         <td>
-                                            <a href="/JDM_kenya/modules/helpers/download_helper.php?file=<?= urlencode($resource['file_path']) ?>&name=<?= urlencode($resource['title']) ?>" class="btn btn-sm btn-outline-primary">
+                                            <a href="<?= BASE_PATH ?>/modules/helpers/download_helper.php?file=<?= urlencode($resource['file_path']) ?>&name=<?= urlencode($resource['title']) ?>" class="btn btn-sm btn-outline-primary">
                                                 <i class="bi bi-download"></i> Download
                                             </a>
                                         </td>

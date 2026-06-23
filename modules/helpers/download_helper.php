@@ -6,7 +6,12 @@ $filePath = $_GET['file'] ?? '';
 $fileName = $_GET['name'] ?? basename($filePath);
 $filePath = str_replace('\\', '/', $filePath);
 $filePath = preg_replace('#^https?://[^/]+#i', '', $filePath);
-$filePath = preg_replace('#^/JDM_kenya/#', '', $filePath);
+// Strip the dynamic base path prefix so paths like /JDM_kenya/uploads/... → uploads/...
+if (BASE_PATH !== '' && strpos($filePath, BASE_PATH . '/') === 0) {
+    $filePath = substr($filePath, strlen(BASE_PATH) + 1);
+} else {
+    $filePath = ltrim($filePath, '/');
+}
 $filePath = ltrim($filePath, '/');
 
 // Security: Validate file path to prevent directory traversal

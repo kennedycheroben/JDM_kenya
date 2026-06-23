@@ -84,7 +84,7 @@ ob_start();
         <p class="text-light lead">Connecting disciples through faith, fitness, and fellowship.</p>
         <?php if (($userRole ?? '') === 'admin' || ($userRole ?? '') === 'super_admin'): ?>
             <div class="mt-3">
-                <a href="/JDM_kenya/sports_admin.php" class="btn btn-warning btn-neon"><i class="bi bi-gear-fill"></i> Admin Panel</a>
+                <a href="<?= BASE_PATH ?>/sports_admin.php" class="btn btn-warning btn-neon"><i class="bi bi-gear-fill"></i> Admin Panel</a>
             </div>
         <?php endif; ?>
     </div>

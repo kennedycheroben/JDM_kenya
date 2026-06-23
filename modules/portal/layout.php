@@ -202,14 +202,14 @@ if (!isset($page_title)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($page_title) ?></title>
-    <link rel="icon" type="image/png" href="/JDM_kenya/images/jdm_logo.png">
+    <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/images/jdm_logo.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style_dashboard.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style_dashboard.css">
     <?php
     $about_pages = ['about.php','about_ministry.php','about_history_spirit.php','about_inner_feature.php','about_outer_feature.php'];
     if (in_array($current_page, $about_pages)) {
-        echo '<link rel="stylesheet" href="/JDM_kenya/assets/css/about.css?v=' . filemtime($_SERVER['DOCUMENT_ROOT'] . '/JDM_kenya/assets/css/about.css') . '">';
+        echo '<link rel="stylesheet" href="' . BASE_PATH . '/assets/css/about.css?v=' . filemtime(dirname(dirname(__DIR__)) . '/assets/css/about.css') . '">';
     }
     ?>
     <style>
@@ -482,7 +482,8 @@ if (!isset($page_title)) {
             <script src="<?php echo htmlspecialchars($scriptPath); ?>" defer></script>
         <?php endforeach; ?>
     <?php endif; ?>
-    <script src="/JDM_kenya/assets/js/global_search.js" defer></script>
+    <script>window.BASE_PATH = '<?= BASE_PATH ?>';</script>
+    <script src="<?= BASE_PATH ?>/assets/js/global_search.js" defer></script>
 </head>
 <body>
     <div class="d-flex">
@@ -494,8 +495,8 @@ if (!isset($page_title)) {
             </div>
             <div class="offcanvas-body flex-column w-100 p-0">
                 <div class="w-100 d-flex flex-column align-items-center py-4" style="background: #079c28;">
-                    <a href="<?php echo $is_admin ? '/JDM_kenya/admin_dashboard.php' : '/JDM_kenya/member_dashboard.php'; ?>" class="d-flex flex-column align-items-center text-decoration-none">
-                        <img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Kenya Logo" style="width:110px; height:110px; object-fit:contain; background:white; border-radius:50%; box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:10px;">
+                    <a href="<?php echo $is_admin ? BASE_PATH . '/admin_dashboard.php' : BASE_PATH . '/member_dashboard.php'; ?>" class="d-flex flex-column align-items-center text-decoration-none">
+                        <img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Kenya Logo" style="width:110px; height:110px; object-fit:contain; background:white; border-radius:50%; box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:10px;">
                         <h4 class="fw-bold text-white mb-2" style="letter-spacing:1px;">JDM Kenya</h4>
                     </a>
                 </div>
@@ -513,7 +514,7 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="/JDM_kenya/profile.php">
+                        <a class="nav-link text-white" href="profile.php">
                             <i class="bi bi-person-circle"></i> My Profile
                         </a>
                     </li>
@@ -557,7 +558,7 @@ if (!isset($page_title)) {
 
                 <?php else: ?>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="/JDM_kenya/profile.php">
+                        <a class="nav-link text-white" href="profile.php">
                             <i class="bi bi-person-circle"></i> My Profile
                         </a>
                     </li>
@@ -803,7 +804,7 @@ if (!isset($page_title)) {
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/JDM_kenya/assets/js/ui_animations.js"></script>
+    <script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
     <script>
         (function () {
             const userId = <?= (int)($_SESSION['user_id'] ?? 0) ?>;

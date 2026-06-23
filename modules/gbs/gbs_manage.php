@@ -120,7 +120,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     
                     if (move_uploaded_file($_FILES['resource_file']['tmp_name'], $target_path)) {
                         $file_type = pathinfo($file_name, PATHINFO_EXTENSION);
-                        $file_path = '/JDM_kenya/uploads/gbs_resources/' . $file_name;
+                        $file_path = BASE_PATH . '/uploads/gbs_resources/' . $file_name;
                         
                         $stmt = $pdo->prepare("
                             INSERT INTO gbs_resources (gbs_id, title, file_path, file_type, uploaded_by, uploaded_at)

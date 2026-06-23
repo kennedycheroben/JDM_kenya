@@ -1,12 +1,6 @@
 <?php
 /**
  * JDM Kenya - Core Database Connection & Performance Engine
- * 
- * Performance Logic:
- * 1. Persistent Connection: Uses unix_socket for lightning-fast local DB communication.
- * 2. Prepared Statements: Emulation disabled to offload processing to MySQL and prevent overhead.
- * 3. Resource Management: Explicit connection closure via shutdown handler.
- * 4. Micro-Caching: Global variable cache to prevent redundant queries within a single request lifecycle.
  */
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -21,7 +15,26 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Load central configuration (supports .env-style overrides)
+// Define base URL path dynamically (e.g. "/JDM_kenya" on local or "" on live production)
+$docRoot = str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? '');
+$projectDir = str_replace('\\', '/', dirname(__DIR__));
+$basePath = '';
+if (!empty($docRoot) && strpos($projectDir, $docRoot) === 0) {
+    $basePath = substr($projectDir, strlen($docRoot));
+}
+$basePath = '/' . ltrim(str_replace('\\', '/', $basePath), '/');
+$basePath = rtrim($basePath, '/');
+if (!defined('BASE_PATH')) {
+    define('BASE_PATH', $basePath);
+}
+
+// Load local overrides first (not checked into VCS): create `config.local.php` in project root
+$localConfig = dirname(__DIR__) . '/config.local.php';
+if (file_exists($localConfig)) {
+    require_once $localConfig;
+}
+
+// Load central configuration from the project root (parent of core)
 $configFile = dirname(__DIR__) . '/config.php';
 if (file_exists($configFile)) {
     require_once $configFile;
@@ -29,30 +42,28 @@ if (file_exists($configFile)) {
 
 // Fallback defaults if config.php is missing
 if (!defined('DB_HOST')) define('DB_HOST', 'localhost');
-if (!defined('DB_NAME')) define('DB_NAME', 'jdm_kenya');
-if (!defined('DB_USER')) define('DB_USER', 'root');
-if (!defined('DB_PASS')) define('DB_PASS', '');
-if (!defined('DB_SOCKET')) define('DB_SOCKET', '/opt/lampp/var/mysql/mysql.sock');
-if (!defined('UPLOAD_DIR')) define('UPLOAD_DIR', dirname(__DIR__) . '/uploads/');
+if (!defined('DB_NAME')) define('DB_NAME', 'xqtrqexj_jdm_kenya');
+if (!defined('DB_USER')) define('DB_USER', 'xqtrqexj_kennedycheroben');
+if (!defined('DB_PASS')) define('DB_PASS', 'ftS_p-X2WvjeTn&');
 
 try {
-    // Establishing a high-performance PDO connection
+    // Establishing a high-performance PDO connection for live production
     $pdo = new PDO(
-        'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4;unix_socket=' . DB_SOCKET,
+        'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
         DB_USER,
         DB_PASS,
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false, // Better performance for modern MySQL
-            PDO::ATTR_PERSISTENT => true,        // Reuse connections across requests for speed
+            PDO::ATTR_EMULATE_PREPARES => false, 
+            PDO::ATTR_PERSISTENT => true,        
         ]
     );
 } catch (PDOException $e) {
-    die('Critical Error: Database connection failed. Please contact admin.');
+    die('Critical Error: Database connection failed. Details: ' . $e->getMessage());
 }
 
-// Resource Cleanup: Ensure connection is released back to the pool
+// Resource Cleanup
 register_shutdown_function(function() use (&$pdo) {
     $pdo = null;
 });
@@ -86,7 +97,6 @@ if (!function_exists('maskPhone')) {
 
 /**
  * Simple Request-Level Cache
- * Prevents multiple database hits for the same data during a single page load.
  */
 $request_cache = [];
 
@@ -102,7 +112,6 @@ if (!function_exists('get_cached_data')) {
 
 /**
  * CSRF Protection
- * Generates a token and stores it in session. Returns the token string.
  */
 if (!function_exists('csrf_token')) {
     function csrf_token(): string {

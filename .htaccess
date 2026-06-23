@@ -1,5 +1,10 @@
 # JDM Kenya Module Redirection Rules
 RewriteEngine On
+
+# Normalize requests that include a leftover "/JDM_kenya" prefix
+# Many templates contain absolute paths like "/JDM_kenya/assets/...". When
+# the site is served from the webroot these requests 404 — strip the prefix.
+RewriteRule ^JDM_kenya/(.*)$ /$1 [R=301,L,NE]
 RewriteRule ^modules/auth/login\.php$ login.php [R=301,L]
 RewriteRule ^modules/auth/signup\.php$ signup.php [R=301,L]
 RewriteRule ^modules/auth/profile\.php$ profile.php [R=301,L]

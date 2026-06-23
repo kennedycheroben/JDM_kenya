@@ -112,7 +112,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     <title>Set Up Your GBS - JDM Kenya</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
     <style>
         .setup-container {
             max-width: 800px;
@@ -240,7 +240,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                             </label>
                             <div class="mb-3">
                                 <img id="profilePreview" class="profile-preview" 
-                                     src="/JDM_kenya/uploads/gbs_pfps/default_gbs.png" 
+                                     src="<?= BASE_PATH ?>/uploads/gbs_pfps/default_gbs.png" 
                                      alt="Group profile picture">
                             </div>
                             <div class="file-upload-wrapper">

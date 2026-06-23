@@ -89,7 +89,7 @@ ob_start();
         </div>
         <div class="d-flex gap-2">
             <?php if ($viewerRole === 'super_admin' && !$isOwnProfile && $u['role'] !== 'super_admin'): ?>
-                <a href="/JDM_kenya/delete_member.php?id=<?= (int)$u['id'] ?>" class="btn btn-outline-danger" onclick="return confirm('Are you sure you want to delete this user? This cannot be undone.');"><i class="bi bi-trash"></i> Delete User</a>
+                <a href="<?= BASE_PATH ?>/delete_member.php?id=<?= (int)$u['id'] ?>" class="btn btn-outline-danger" onclick="return confirm('Are you sure you want to delete this user? This cannot be undone.');"><i class="bi bi-trash"></i> Delete User</a>
             <?php endif; ?>
             <a href="view_members.php" class="btn btn-secondary">Back</a>
         </div>

@@ -125,7 +125,8 @@ class GlobalSearch {
     }
     
     async fetchSearchResults(query) {
-        const response = await fetch(`/JDM_kenya/modules/search/search_handler.php?q=${encodeURIComponent(query)}`);
+        const base = (typeof window.BASE_PATH !== 'undefined') ? window.BASE_PATH : '';
+        const response = await fetch(`${base}/modules/search/search_handler.php?q=${encodeURIComponent(query)}`);
         if (!response.ok) {
             throw new Error('Search request failed');
         }

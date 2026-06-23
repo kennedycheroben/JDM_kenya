@@ -199,15 +199,15 @@ function getSubpagesGrid() {
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/style.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/JDM_kenya/assets/css/style.css') ?>">
-    <link rel="stylesheet" href="/JDM_kenya/assets/css/about.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/JDM_kenya/assets/css/about.css') ?>">
-    <link rel="icon" type="image/png" href="/JDM_kenya/images/jdm_logo.png">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/css/style.css') ?>">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/about.css?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/css/about.css') ?>">
+    <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/images/jdm_logo.png">
 </head>
 <body>
 <header id="header" class="header fixed-top">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
         <a href="index.php" class="logo d-flex align-items-center">
-            <img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img">
+            <img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img">
             <h1 class="sitename ms-2">JDM Kenya</h1>
         </a>
         <nav id="navmenu" class="navmenu">
@@ -309,7 +309,7 @@ function getSubpagesGrid() {
 <div id="preloader"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
-<script src="/JDM_kenya/assets/js/ui_animations.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
 </body>
 </html>
 <?php endif; ?>

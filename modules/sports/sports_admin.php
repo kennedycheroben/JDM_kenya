@@ -4,7 +4,7 @@ require_once dirname(__FILE__) . '/../../core/sports_schema.php';
 
 $userRole = $_SESSION['user_role'] ?? null;
 if ($userRole !== 'admin' && $userRole !== 'super_admin') {
-    header('Location: /JDM_kenya/sports.php');
+    header('Location: ' . BASE_PATH . '/sports.php');
     exit;
 }
 
@@ -90,7 +90,7 @@ ob_start();
             <h2><i class="bi bi-gear-fill text-warning"></i> Sports Admin Panel</h2>
             <p class="text-muted mb-0">Manage live matches, commentary, and player leaderboards.</p>
         </div>
-        <a href="/JDM_kenya/sports.php" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Hub</a>
+        <a href="<?= BASE_PATH ?>/sports.php" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Hub</a>
     </div>
 </div>
 

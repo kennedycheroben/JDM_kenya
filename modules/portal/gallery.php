@@ -52,7 +52,7 @@ ob_start();
                      data-bs-toggle="modal" data-bs-target="#imgModal"
                      data-src="<?= escape($img['file_path']) ?>"
                      data-title="<?= escape($img['title'] ?? 'Photo') ?>">
-                    <img class="gimg shadow-sm" src="<?= escape($img['file_path']) ?>" alt="<?= escape($img['title'] ?? 'Gallery photo') ?>" loading="lazy" onerror="this.src='/JDM_kenya/images/jdm_logo.png'; this.style.objectFit='contain'">
+                    <img class="gimg shadow-sm" src="<?= escape($img['file_path']) ?>" alt="<?= escape($img['title'] ?? 'Gallery photo') ?>" loading="lazy" onerror="this.src='<?= BASE_PATH ?>/images/jdm_logo.png'; this.style.objectFit='contain'">
                     <div class="small text-muted mt-2 text-truncate"><?= escape($img['title'] ?? '') ?></div>
                 </div>
             </div>
@@ -95,7 +95,7 @@ ob_start();
             
             // Set download button URL
             if (downloadBtn && src) {
-                downloadBtn.href = `/JDM_kenya/modules/helpers/download_helper.php?file=${encodeURIComponent(src)}&name=${encodeURIComponent(t)}`;
+                downloadBtn.href = `<?= BASE_PATH ?>/modules/helpers/download_helper.php?file=${encodeURIComponent(src)}&name=${encodeURIComponent(t)}`;
             }
         });
     });

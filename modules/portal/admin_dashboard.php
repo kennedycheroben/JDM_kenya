@@ -203,7 +203,7 @@ ob_start();
 <!-- Page Header -->
 <div class="row mb-4">
     <div class="col-md-12">
-        <h2><img src="/JDM_kenya/images/jdm_logo.png" alt="JDM Logo" class="logo-img" style="height: 40px; width: auto;"> Admin Dashboard</h2>
+        <h2><img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Logo" class="logo-img" style="height: 40px; width: auto;"> Admin Dashboard</h2>
         <p class="text-muted">Manage portal content, members, and resources</p>
     </div>
 </div>
