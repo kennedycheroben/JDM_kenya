@@ -433,6 +433,29 @@ body {
     background: #555;
 }
 
+/* Global Search Bar Responsive */
+.global-search-container {
+  max-width: 300px !important;
+}
+
+@media (max-width: 1199px) {
+  .global-search-container {
+    max-width: 250px !important;
+  }
+}
+
+@media (max-width: 991px) {
+  .global-search-container {
+    max-width: 200px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .global-search-container {
+    max-width: 160px !important;
+  }
+}
+
 /* Sticky Sidebar Fix for Desktop */
 @media (min-width: 768px) {
     .sidebar {

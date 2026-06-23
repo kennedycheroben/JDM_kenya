@@ -132,6 +132,9 @@ h1, h2, h3, h4, h5, h6 {
   .navmenu.mobile-nav-active>ul {
     display: block;
   }
+  .hero-header .navmenu a {
+    color: var(--nav-color) !important;
+  }
 }
 
 .section {

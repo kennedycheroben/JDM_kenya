@@ -15,17 +15,20 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Define base URL path dynamically (e.g. "/JDM_kenya" on local or "" on live production)
-$docRoot = str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? '');
-$projectDir = str_replace('\\', '/', dirname(__DIR__));
-$basePath = '';
-if (!empty($docRoot) && strpos($projectDir, $docRoot) === 0) {
-    $basePath = substr($projectDir, strlen($docRoot));
-}
-$basePath = '/' . ltrim(str_replace('\\', '/', $basePath), '/');
-$basePath = rtrim($basePath, '/');
+// Define base URL path dynamically:
+// - On localhost/XAMPP: project is at /JDM_kenya under the htdocs root → BASE_PATH = "/JDM_kenya"
+// - On live cPanel: project IS the document root (public_html/) → BASE_PATH = ""
+$docRoot    = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
+$projectDir = rtrim(str_replace('\\', '/', dirname(__DIR__)), '/');
+
 if (!defined('BASE_PATH')) {
-    define('BASE_PATH', $basePath);
+    if (!empty($docRoot) && strpos($projectDir, $docRoot) === 0) {
+        $computed = substr($projectDir, strlen($docRoot));
+        // Normalize: if the project dir IS the doc root, computed will be "" — keep it empty
+        define('BASE_PATH', rtrim($computed, '/'));
+    } else {
+        define('BASE_PATH', '');
+    }
 }
 
 // Load local overrides first (not checked into VCS): create `config.local.php` in project root
