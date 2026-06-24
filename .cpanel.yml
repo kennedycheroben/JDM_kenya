@@ -1,5 +1,5 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/xqtrqexj/public_html/
-    - /bin/cp -R . $DEPLOYPATH
+    - export DEPLOYPATH=/home/xqtrqexj/public_html
+    - /bin/rsync -av --exclude='.git' --exclude='.cpanel.yml' ./ $DEPLOYPATH/
