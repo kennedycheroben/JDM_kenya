@@ -683,7 +683,7 @@ class YouTubeStyleVideoPlayer {
                 }
                 
                 .video-completed-status.completed {
-                    color: #28a745;
+                    color: #1591DC;
                 }
                 
                 .completion-overlay {

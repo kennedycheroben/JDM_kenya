@@ -204,7 +204,7 @@ ob_start();
 <div class="row mb-4">
     <div class="col-md-12">
         <h2><img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Logo" class="logo-img" style="height: 40px; width: auto;"> Admin Dashboard</h2>
-        <p class="text-muted">Manage portal content, members, and resources</p>
+        <p class="text-muted">Manage Dashboard content, members, and resources</p>
     </div>
 </div>
 
@@ -217,7 +217,7 @@ if (isset($_GET['new_admin']) && $is_link_valid):
             <div class="display-6 me-3">🛡️</div>
             <div>
                 <h4 class="alert-heading fw-bold mb-1" style="color: #842029;">Welcome, Admin!</h4>
-                <p class="mb-0 fw-medium" style="color: #842029;">You have been promoted to Admin. You can now manage portal activities, resources, and announcements.</p>
+                <p class="mb-0 fw-medium" style="color: #842029;">You have been promoted to Admin. You can now manage dashboard activities, resources, and announcements.</p>
             </div>
         </div>
     </div>
@@ -487,11 +487,15 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                                         <tr>
                                             <td>
                                                 <?php
-                                                $icon = match(($resource['category'] ?? 'pdf_resource')) {
-                                                    'study_material' => 'bi-book text-primary',
-                                                    'video_content' => 'bi-play-circle text-success',
-                                                    default => 'bi-file-earmark-pdf text-danger'
-                                                };
+                                                $icon = 'bi-file-earmark-pdf text-danger';
+                                                switch(($resource['category'] ?? 'pdf_resource')) {
+                                                    case 'study_material':
+                                                        $icon = 'bi-book text-primary';
+                                                        break;
+                                                    case 'video_content':
+                                                        $icon = 'bi-play-circle text-success';
+                                                        break;
+                                                }
                                                 ?>
                                                 <i class="bi <?= $icon ?>"></i> <?= escape($resource['title']) ?>
                                             </td>

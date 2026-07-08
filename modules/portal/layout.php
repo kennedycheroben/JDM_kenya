@@ -101,31 +101,31 @@ function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $curr
     
     // Collect all roles
     if ($user_role === 'super_admin') {
-        $roles[] = ['name' => 'JDM Leader', 'color' => '#212529', 'priority' => 5];
+        $roles[] = ['name' => 'JDM Leader', 'color' => '#2C5EAD', 'priority' => 5];
     } elseif ($user_role === 'admin') {
-        $roles[] = ['name' => 'Admin', 'color' => '#dc3545', 'priority' => 4];
+        $roles[] = ['name' => 'Admin', 'color' => '#1591DC', 'priority' => 4];
     }
     
     if ($is_gbs_leader) {
-        $roles[] = ['name' => 'GBS Leader', 'color' => '#ffc107', 'priority' => 3];
+        $roles[] = ['name' => 'GBS Leader', 'color' => '#4BB8FA', 'priority' => 3];
     }
     
     // Member categories (only if no admin roles)
     if (empty($roles)) {
         switch ($user_category) {
             case 'student':
-                $roles[] = ['name' => 'Student', 'color' => '#0dcaf0', 'priority' => 2];
+                $roles[] = ['name' => 'Student', 'color' => '#C4E2F5', 'priority' => 2];
                 break;
             case 'associate':
-                $roles[] = ['name' => 'Associate', 'color' => '#6c757d', 'priority' => 2];
+                $roles[] = ['name' => 'Associate', 'color' => '#4BB8FA', 'priority' => 2];
                 break;
             case 'partner':
-                $roles[] = ['name' => 'Office Bearer', 'color' => '#fd7e14', 'priority' => 2];
+                $roles[] = ['name' => 'Office Bearer', 'color' => '#1591DC', 'priority' => 2];
                 break;
             case 'other':
                 return ['html' => '', 'classes' => '', 'style' => '', 'text' => '', 'roles' => [], 'is_dual' => false];
             default:
-                $roles[] = ['name' => 'Member', 'color' => '#0d6efd', 'priority' => 0];
+                $roles[] = ['name' => 'Member', 'color' => '#1591DC', 'priority' => 0];
                 break;
         }
     }
@@ -204,6 +204,7 @@ if (!isset($page_title)) {
     <title><?= htmlspecialchars($page_title) ?></title>
     <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/images/jdm_logo.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style_dashboard.css">
     <?php
@@ -214,14 +215,56 @@ if (!isset($page_title)) {
     ?>
     <style>
         :root { --sidebar-width: 250px; }
+
+        /*
+         * FIX: animated-scroll.css sets #smooth-wrapper { position:fixed; overflow:hidden }
+         * which is correct for public pages with Lenis smooth scroll, but breaks the
+         * dashboard layout where the main content must scroll normally.
+         * Override to make both divs transparent flow containers in the dashboard.
+         */
+        html, body, body.dashboard-wrapper, #smooth-wrapper, #smooth-content {
+            position: static !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            overflow-y: auto !important;
+            width: 100% !important;
+        }
+
+        body.dashboard-wrapper {
+            min-height: 100vh !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        #smooth-wrapper {
+            position: static !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            overflow-y: auto !important;
+            width: 100% !important;
+            display: block !important;
+        }
+        #smooth-content {
+            transform: none !important;
+            will-change: auto !important;
+            display: block !important;
+        }
+
+        .main-content-wrapper {
+            overflow: visible !important;
+            min-height: 100vh;
+        }
+
         @media (min-width: 768px) {
-            #sidebarMenu { width: var(--sidebar-width) !important; }
+            #sidebarMenu { width: var(--sidebar-width) !important; position: fixed; top: 0; left: 0; z-index: 1040; height: 100vh; overflow-y: auto; }
             .main-content-wrapper { width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
-            footer.footer { width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
+            .site-footer { width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
         }
         @media (max-width: 767.98px) {
             .main-content-wrapper { width: 100%; margin-left: 0; }
-            footer.footer { width: 100%; margin-left: 0; }
+            .site-footer { width: 100%; margin-left: 0; }
         }
         #chatNotifyBadge {
             max-width: 170px;
@@ -268,13 +311,13 @@ if (!isset($page_title)) {
             transform: translateY(0) !important;
         }
         .dashboard-switcher.switcher-gbs {
-            border-color: #ffc107;
-            background: rgba(255,193,7,0.15);
+            border-color: #4BB8FA;
+            background: rgba(75,184,250,0.15);
         }
         .dashboard-switcher.switcher-gbs:hover {
-            background: rgba(255,193,7,0.28);
-            border-color: #ffc107;
-            box-shadow: 0 6px 16px rgba(255,193,7,0.3) !important;
+            background: rgba(75,184,250,0.28);
+            border-color: #4BB8FA;
+            box-shadow: 0 6px 16px rgba(75,184,250,0.3) !important;
         }
         .dashboard-switcher.switcher-member {
             border-color: rgba(255,255,255,0.4);
@@ -328,7 +371,7 @@ if (!isset($page_title)) {
         
         .form-control:focus, .form-select:focus {
             transform: scale(1.02);
-            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+            box-shadow: 0 0 0 0.2rem rgba(21, 145, 220, 0.25);
         }
         
         /* Modal transitions */
@@ -392,7 +435,7 @@ if (!isset($page_title)) {
             text-shadow: 0 1px 2px rgba(0,0,0,0.3);
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            background: linear-gradient(90deg, #dc3545 50%, #ffc107 50%);
+            background: linear-gradient(90deg, #2C5EAD 50%, #4BB8FA 50%);
             border: 1px solid rgba(255,255,255,0.2);
         }
         
@@ -409,14 +452,14 @@ if (!isset($page_title)) {
             left: 0;
             right: 0;
             bottom: 0;
-            background: linear-gradient(90deg, rgba(220,53,69,0.1) 50%, rgba(255,193,7,0.1) 50%);
+            background: linear-gradient(90deg, rgba(44,94,173,0.1) 50%, rgba(75,184,250,0.1) 50%);
             border-radius: inherit;
             pointer-events: none;
         }
         
         /* Contextual GBS badge styling */
         .badge-gbs-context {
-            background: linear-gradient(90deg, #ffc107 60%, #dc3545 40%) !important;
+            background: linear-gradient(90deg, #4BB8FA 60%, #2C5EAD 40%) !important;
             animation: badgePulse 2s ease-in-out infinite;
         }
         
@@ -427,7 +470,7 @@ if (!isset($page_title)) {
             }
             50% { 
                 transform: scale(1.05); 
-                box-shadow: 0 4px 8px rgba(255,193,7,0.4);
+                box-shadow: 0 4px 8px rgba(75,184,250,0.4);
             }
         }
         
@@ -482,19 +525,23 @@ if (!isset($page_title)) {
             <script src="<?php echo htmlspecialchars($scriptPath); ?>" defer></script>
         <?php endforeach; ?>
     <?php endif; ?>
+
     <script>window.BASE_PATH = '<?= BASE_PATH ?>';</script>
     <script src="<?= BASE_PATH ?>/assets/js/global_search.js" defer></script>
 </head>
-<body>
-    <div class="d-flex">
+<body class="dashboard-wrapper">
+
+<div id="cursor"></div>
+<div id="cursor-blur"></div>
+
         <!-- Sidebar -->
-        <div class="sidebar offcanvas-md offcanvas-start vh-100 d-flex flex-column align-items-center p-0" tabindex="-1" id="sidebarMenu" style="width:250px; background: #390277; min-height:100vh;">
+        <div class="sidebar offcanvas-md offcanvas-start vh-100 d-flex flex-column align-items-center p-0" tabindex="-1" id="sidebarMenu" style="width:250px; background-color: #2C5EAD !important; min-height:100vh;">
             <div class="offcanvas-header w-100 d-md-none border-bottom pb-2 mt-2" style="border-color: rgba(255,255,255,0.1) !important;">
                 <h5 class="offcanvas-title text-white ms-2">Menu</h5>
                 <button type="button" class="btn-close btn-close-white me-2" data-bs-dismiss="offcanvas" data-bs-target="#sidebarMenu" aria-label="Close"></button>
             </div>
             <div class="offcanvas-body flex-column w-100 p-0">
-                <div class="w-100 d-flex flex-column align-items-center py-4" style="background: #079c28;">
+                <div class="w-100 d-flex flex-column align-items-center py-4" style="background: #2C5EAD !important;">
                     <a href="<?php echo $is_admin ? BASE_PATH . '/admin_dashboard.php' : BASE_PATH . '/member_dashboard.php'; ?>" class="d-flex flex-column align-items-center text-decoration-none">
                         <img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Kenya Logo" style="width:110px; height:110px; object-fit:contain; background:white; border-radius:50%; box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:10px;">
                         <h4 class="fw-bold text-white mb-2" style="letter-spacing:1px;">JDM Kenya</h4>
@@ -519,11 +566,26 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <?php if($is_super_admin): ?>
-                        <li class="nav-item mb-2">
-                            <a class="nav-link text-white" href="super_admin_dashboard.php">
-                                <i class="bi bi-shield-lock"></i> JDM Leader
-                            </a>
-                        </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link text-white" href="super_admin_dashboard.php">
+                            <i class="bi bi-shield-lock"></i> JDM Leader
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link text-white" href="applications.php">
+                            <i class="bi bi-file-earmark-text"></i> Applications
+                            <?php
+                            $appCount = 0;
+                            try {
+                                $stmtApp = $pdo->query("SELECT COUNT(*) as c FROM users WHERE is_approved = 0 AND category IN ('partner','missionary')");
+                                $appRow = $stmtApp->fetch(PDO::FETCH_ASSOC);
+                                $appCount = (int)$appRow['c'];
+                            } catch (Throwable $e) {}
+                            if ($appCount > 0): ?>
+                                <span class="badge bg-danger ms-1"><?= $appCount ?></span>
+                            <?php endif; ?>
+                        </a>
+                    </li>
                     <?php endif; ?>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white" href="admin_dashboard.php?tab=activities">
@@ -568,9 +630,8 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="chat.php" id="chatMenuLink">
-                            <span><i class="bi bi-chat-dots"></i> Chat</span>
-                            <span id="chatNotifyBadge" class="badge bg-danger d-none" style="font-size: 0.7rem;">0</span>
+                        <a class="nav-link text-white" href="chat.php">
+                            <i class="bi bi-chat-dots"></i> Chat                                        
                         </a>
                     </li>
                     <li class="nav-item mb-2">
@@ -659,7 +720,7 @@ if (!isset($page_title)) {
                 <?php if ($user_role === 'admin' || $user_role === 'super_admin'): ?>
                     <?php if ($is_impersonating_member): ?>
                         <li class="nav-item mb-2 px-1">
-                            <a class="dashboard-switcher switcher-member" style="border-color: #dc3545; background: rgba(220,53,69,0.15);" href="?view_as=admin">
+                            <a class="dashboard-switcher switcher-member" style="border-color: #2C5EAD; background: rgba(44,94,173,0.15);" href="?view_as=admin">
                                 <i class="bi bi-shield-lock"></i>
                                 <span>Switch to Admin View</span>
                                 <i class="bi bi-arrow-return-left ms-auto"></i>
@@ -703,46 +764,59 @@ if (!isset($page_title)) {
             </div>
         </div>
 
-        <div class="flex-grow-1 main-content-wrapper" style="min-width: 0;">
+<div id="smooth-wrapper">
+<div id="smooth-content">
+
+        <div class="main-content-wrapper" style="min-width: 0;">
             <!-- Top Navbar -->
-            <nav class="navbar bg-primary sticky-top">
-                <div class="container-fluid flex-nowrap">
-                    <div class="d-flex align-items-center text-white text-truncate">
-                        <button class="btn btn-outline-light d-md-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu">
+            <nav class="navbar bg-primary py-2 py-md-1">
+                <div class="container-fluid d-flex justify-content-between align-items-start">
+                    <!-- Left Side: Title and Badges -->
+                    <div class="d-flex flex-column align-items-start text-white gap-2 me-auto" style="padding-right: 10px;">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-cross d-none d-sm-inline-block me-2" style="font-size: 1.5rem;"></i>
+                            <span>
+                                Dashboard - Welcome <strong><?= htmlspecialchars($user_name) ?></strong> 
+                            </span>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <?= $display_role['html'] ?>
+                            <?php if($is_impersonating_member): ?>
+                                <span class="badge bg-warning text-dark flex-shrink-0">Member View</span>
+                            <?php endif; ?>
+                            <?php if (($user_role === 'admin' || $user_role === 'super_admin') && $is_gbs_leader): ?>
+                                <div class="dropdown d-inline-block">
+                                    <button class="btn btn-sm btn-outline-light dropdown-toggle py-0 py-sm-1" type="button" data-bs-toggle="dropdown">
+                                        <i class="bi bi-toggle-on"></i> Switch View
+                                    </button>
+                                    <ul class="dropdown-menu shadow">
+                                        <?php if (!$is_impersonating_member): ?>
+                                            <li><a class="dropdown-item" href="?view_as=member">
+                                                <i class="bi bi-person"></i> View as Member
+                                            </a></li>
+                                        <?php endif; ?>
+                                        <?php if (strpos($current_page, 'gbs') === false): ?>
+                                            <li><a class="dropdown-item" href="<?= $gbs_leader_switch_url ?>">
+                                                <i class="bi bi-people-fill"></i> GBS Leader View
+                                            </a></li>
+                                        <?php endif; ?>
+                                        <?php if ($is_impersonating_member): ?>
+                                            <li><a class="dropdown-item" href="?view_as=admin">
+                                                <i class="bi bi-shield"></i> Admin View
+                                            </a></li>
+                                        <?php endif; ?>
+                                    </ul>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <!-- Right Side: Hamburger and Search -->
+                    <div class="d-flex flex-column align-items-end gap-2 ms-auto" style="min-width: 150px; max-width: 300px; flex: 1;">
+                        <button class="btn btn-outline-light d-md-none border-2 px-3 py-1 shadow-sm mt-1 mt-sm-0" style="font-size: 1.4rem;" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu">
                             <i class="bi bi-list"></i>
                         </button>
-                        <i class="bi bi-cross me-2" style="font-size: 1.5rem;"></i>
-                        <span class="text-truncate">
-                            Dashboard - Welcome <strong><?= htmlspecialchars($user_name) ?></strong> 
-                        </span>
-                        <?= $display_role['html'] ?>
-                        <?php if($is_impersonating_member): ?>
-                            <span class="badge bg-warning text-dark ms-2 flex-shrink-0">Member View</span>
-                        <?php endif; ?>
-                        <?php if (($user_role === 'admin' || $user_role === 'super_admin') && $is_gbs_leader): ?>
-                            <div class="dropdown d-inline-block ms-2">
-                                <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                    <i class="bi bi-toggle-on"></i> Switch View
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <?php if (!$is_impersonating_member): ?>
-                                        <li><a class="dropdown-item" href="?view_as=member">
-                                            <i class="bi bi-person"></i> View as Member
-                                        </a></li>
-                                    <?php endif; ?>
-                                    <?php if (strpos($current_page, 'gbs') === false): ?>
-                                        <li><a class="dropdown-item" href="<?= $gbs_leader_switch_url ?>">
-                                            <i class="bi bi-people-fill"></i> GBS Leader View
-                                        </a></li>
-                                    <?php endif; ?>
-                                    <?php if ($is_impersonating_member): ?>
-                                        <li><a class="dropdown-item" href="?view_as=admin">
-                                            <i class="bi bi-shield"></i> Admin View
-                                        </a></li>
-                                    <?php endif; ?>
-                                </ul>
-                            </div>
-                        <?php endif; ?>
+                        <div id="searchBarPlaceholder" class="w-100 d-flex justify-content-end"></div>
                     </div>
                 </div>
             </nav>
@@ -773,35 +847,10 @@ if (!isset($page_title)) {
                 ?>
             </div>
         </div>
-    </div>
+    <?php $as_no_wrapper = true; include dirname(__DIR__) . '/public/footer.php'; ?>
 
-    <footer class="footer bg-primary text-white py-4 mt-5">
-        <div class="container">
-            <div class="row align-items-start">
-                <div class="col-12 col-md-6 text-center text-md-start mb-4 mb-md-0">
-                    <p class="mb-1 fw-semibold">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
-                    <p class="mb-0 small">Discipleship, Evangelism, World Mission</p>
-                    <p class="mb-3 small">Go and Make Disciples!</p>
-                    <div class="d-flex gap-3 justify-content-center justify-content-md-start">
-                        <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="text-white opacity-75" title="Facebook"><i class="bi bi-facebook fs-5"></i></a>
-                        <a href="#" target="_blank" class="text-white opacity-75" title="Instagram"><i class="bi bi-instagram fs-5"></i></a>
-                        <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="text-white opacity-75" title="TikTok"><i class="bi bi-tiktok fs-5"></i></a>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6 d-flex flex-column align-items-center align-items-md-end">
-                    <div class="fw-semibold mb-3">Quick Links</div>
-                    <ul class="list-unstyled text-center text-md-end mb-0">
-                        <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="index.php">Home</a></li>
-                        <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="about.php">About Us</a></li>
-                        <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="activities.php">Activities</a></li>
-                        <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="sports.php">Sports Ministry</a></li>
-                        <li class="mb-2"><a class="text-white text-decoration-none opacity-75" href="prayer_wall.php">Prayer Wall</a></li>
-                        <li><a class="text-white text-decoration-none opacity-75" href="contact.php">Contact Support</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </footer>
+</div>
+</div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
@@ -857,6 +906,33 @@ if (!isset($page_title)) {
             pollNewMessages();
             setInterval(pollNewMessages, 5000);
         })();
+    </script>
+    <script>
+        // Global modal cleanup: ensure no leftover backdrop or body classes remain
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('hidden.bs.modal', function (e) {
+                // small delay to allow Bootstrap to finish its cleanup, then remove any stray backdrops
+                setTimeout(function() {
+                    document.querySelectorAll('.modal-backdrop').forEach(function(el){ el.remove(); });
+                    document.body.classList.remove('modal-open');
+                    document.documentElement.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.documentElement.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                    document.documentElement.style.paddingRight = '';
+                }, 50);
+            });
+
+            // When showing a modal, ensure we don't accumulate multiple backdrops
+            document.addEventListener('show.bs.modal', function (e) {
+                setTimeout(function() {
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    if (backdrops.length > 1) {
+                        backdrops.forEach(function(b, i){ if (i > 0) b.remove(); });
+                    }
+                }, 60);
+            });
+        });
     </script>
 </body>
 </html>

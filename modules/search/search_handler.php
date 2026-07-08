@@ -59,6 +59,7 @@ try {
 
     // --- User Search ---
     // Find users by name, email, or WhatsApp phone. JDM Leaders see all roles.
+    $isAdminViewer = ($user_role === 'admin' || $user_role === 'super_admin') ? 1 : 0;
     $stmt = $pdo->prepare("
         SELECT 
             id,
@@ -71,6 +72,7 @@ try {
         FROM users 
         WHERE (name LIKE ? OR email LIKE ? OR whatsapp_phone LIKE ?)
         AND (role != 'super_admin' OR ? = 1)
+        AND (category NOT IN ('partner', 'missionary') OR ? = 1)
         ORDER BY 
             CASE 
                 WHEN name LIKE ? THEN 1
@@ -84,6 +86,7 @@ try {
     $stmt->execute([
         $searchPattern, $searchPattern, $searchPattern,
         $user_role === 'super_admin' ? 1 : 0,
+        $isAdminViewer,
         $query . '%', $query . '%'
     ]);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);

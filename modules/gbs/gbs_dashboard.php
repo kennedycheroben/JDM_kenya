@@ -67,7 +67,14 @@ try {
     $stmt = $pdo->prepare("SELECT is_gbs_leader FROM users WHERE id = ?");
     $stmt->execute([$user_id]);
     $is_gbs_leader_db = (bool)$stmt->fetchColumn();
-} catch (PDOException $e) { /* fallback to session if db fails */ }
+} catch (PDOException $e) {
+    // Column may not exist in older DBs; fall back to gbs_members check
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gbs_members WHERE user_id = ? AND role = 'leader'");
+        $stmt->execute([$user_id]);
+        $is_gbs_leader_db = (bool)$stmt->fetchColumn();
+    } catch (PDOException $ignored) {}
+}
 
 $can_create_group = in_array($user_role, ['admin', 'super_admin'], true) || $is_gbs_leader_db;
 
@@ -151,8 +158,11 @@ if ($can_create_group && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') && (
             ");
             $stmt->execute([$gbs_id, $leader_id]);
 
-            $stmt = $pdo->prepare('UPDATE users SET is_gbs_leader = 1 WHERE id = ?');
-            $stmt->execute([$leader_id]);
+            // Mark the new leader in users table (column added via setup.php migration)
+            try {
+                $pdo->prepare('UPDATE users SET is_gbs_leader = 1 WHERE id = ?')->execute([$leader_id]);
+            } catch (PDOException $ignored) { /* column may not exist yet — run setup.php */ }
+
 
             if ($leader_id !== $user_id) {
                 $expiry = time() + (7 * 24 * 60 * 60);

@@ -12,7 +12,8 @@ if (!function_exists('redirectToContact')) {
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_csrf();
+    if (!require_csrf()) { redirectToContact('?error=csrf'); }
+    if (!check_rate_limit('contact', 5, 300)) { redirectToContact('?error=rate'); }
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $subject = trim($_POST['subject'] ?? '');

@@ -11,7 +11,11 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 $userName = $_SESSION['user_name'] ?? 'Member';
 $userRole = $_SESSION['user_role'] ?? 'member';
 
-$members = $pdo->query("SELECT id, name, pfp_path FROM users WHERE role IN ('member','admin') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+if ($userRole === 'admin' || $userRole === 'super_admin') {
+    $members = $pdo->query("SELECT id, name, pfp_path FROM users WHERE role IN ('member','admin') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $members = $pdo->query("SELECT id, name, pfp_path FROM users WHERE role IN ('member','admin') AND category NOT IN ('partner', 'missionary') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+}
 $resources = $pdo->query('SELECT id, title, file_path, upload_date FROM resources ORDER BY upload_date DESC')->fetchAll(PDO::FETCH_ASSOC);
 $announcements = $pdo->query('SELECT id, title, content, date_posted FROM announcements ORDER BY date_posted DESC LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
 $publicPrayers = $pdo->query('SELECT pr.id, pr.message, pr.created_at, pr.privacy_level, pr.is_private, u.name FROM prayer_requests pr INNER JOIN users u ON u.id = pr.user_id WHERE pr.privacy_level IN ("public", "anonymous") OR pr.is_private = 0 ORDER BY pr.created_at DESC LIMIT 30')->fetchAll(PDO::FETCH_ASSOC);
@@ -31,7 +35,9 @@ if ($userId > 0) {
     <title>JDM Kenya | Members Portal</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/animated-scroll.css">
     <style>
         .avatar {
             width: 48px;
@@ -61,6 +67,12 @@ if ($userId > 0) {
     </style>
 </head>
 <body class="bg-light">
+
+<div id="cursor"></div>
+<div id="cursor-blur"></div>
+
+<div id="smooth-wrapper">
+<div id="smooth-content">
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
@@ -323,5 +335,14 @@ if ($userId > 0) {
         });
     })();
 </script>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/lenis.min.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/animated-scroll.js?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/js/animated-scroll.js') ?>"></script>
+
 </body>
 </html>

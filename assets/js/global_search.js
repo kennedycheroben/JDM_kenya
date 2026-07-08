@@ -33,7 +33,7 @@ class GlobalSearch {
         
         // Create search bar HTML
         const searchHTML = `
-            <div class="global-search-container position-relative" style="max-width: 400px;">
+            <div class="global-search-container ms-auto position-relative">
                 <div class="input-group">
                     <span class="input-group-text bg-white border-end-0">
                         <i class="bi bi-search text-muted"></i>
@@ -53,17 +53,22 @@ class GlobalSearch {
             </div>
         `;
         
-        // Insert into navbar
+        // Insert into navbar or placeholder
+        const placeholder = document.getElementById('searchBarPlaceholder');
         const navbar = document.querySelector('.navbar .container-fluid');
-        if (navbar) {
-            const searchDiv = document.createElement('div');
-            searchDiv.className = 'ms-auto me-3';
-            searchDiv.innerHTML = searchHTML;
+        
+        const searchDiv = document.createElement('div');
+        searchDiv.className = 'ms-auto'; // Remove w-100 so it aligns to the right naturally
+        searchDiv.innerHTML = searchHTML;
+        
+        if (placeholder) {
+            placeholder.appendChild(searchDiv);
+        } else if (navbar) {
             navbar.appendChild(searchDiv);
-            
-            this.searchInput = document.getElementById('globalSearch');
-            this.resultsContainer = document.getElementById('searchResults');
         }
+        
+        this.searchInput = document.getElementById('globalSearch');
+        this.resultsContainer = document.getElementById('searchResults');
     }
     
     setupEventListeners() {

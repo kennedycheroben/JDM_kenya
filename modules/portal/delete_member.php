@@ -45,10 +45,12 @@ $success = '';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     require_csrf();
     try {
-        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+        require_once dirname(__FILE__) . '/../../core/users.php';
+        deleteUser($pdo, $id);
         header('Location: view_members.php');
         exit;
     } catch (Throwable $e) {
+        error_log('delete_member: ' . $e->getMessage());
         $error = 'Unable to delete user.';
     }
 }

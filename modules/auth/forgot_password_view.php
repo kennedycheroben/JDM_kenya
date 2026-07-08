@@ -34,7 +34,9 @@ $success = '';
 // FORM SUBMISSION HANDLER
 // =========================================================================
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_csrf();
+    if (!require_csrf()) { $error = $_SESSION['csrf_error'] ?? 'Session expired. Please reload.'; unset($_SESSION['csrf_error']); }
+    elseif (!check_rate_limit('forgot_password', 3, 300)) { $error = 'Too many requests. Please try again in 5 minutes.'; }
+    else {
     // Retrieve and sanitize email from form submission
     $email = trim($_POST['email'] ?? '');
     
@@ -50,7 +52,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         // DATABASE LOOKUP: Verify email exists
         // =====================================================================
         try {
-            $stmt = $pdo->prepare('SELECT id, name FROM users WHERE email = ? LIMIT 1');
+            $stmt = $pdo->prepare('SELECT id, name FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
             $stmt->execute([$email]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
@@ -82,12 +84,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 // =====================================================================
                 // DATABASE UPDATE: Save hashed token and expiration to user record
                 // =====================================================================
-                $stmtUpdate = $pdo->prepare('
-                    UPDATE users 
-                    SET reset_token = ?, token_expires_at = ?
-                    WHERE id = ?
-                ');
-                $stmtUpdate->execute([$tokenHash, $expirationTime, $user['id']]);
+                try {
+                    $stmtUpdate = $pdo->prepare('
+                        UPDATE users 
+                        SET reset_token = ?, token_expires_at = ?
+                        WHERE id = ?
+                    ');
+                    $stmtUpdate->execute([$tokenHash, $expirationTime, $user['id']]);
+                } catch (PDOException $e) {
+                    // Column might not exist yet - try to add it
+                    if ($e->getCode() == '42S22') {
+                        try {
+                            $pdo->exec("ALTER TABLE users ADD COLUMN reset_token VARCHAR(64) NULL DEFAULT NULL");
+                            $pdo->exec("ALTER TABLE users ADD COLUMN token_expires_at DATETIME NULL DEFAULT NULL");
+                            $stmtUpdate = $pdo->prepare('
+                                UPDATE users 
+                                SET reset_token = ?, token_expires_at = ?
+                                WHERE id = ?
+                            ');
+                            $stmtUpdate->execute([$tokenHash, $expirationTime, $user['id']]);
+                        } catch (PDOException $e2) {
+                            error_log("Password recovery column migration error: " . $e2->getMessage());
+                            throw $e;
+                        }
+                    } else {
+                        throw $e;
+                    }
+                }
                 
                 $recoveryLink = site_base_url() . '/reset_password.php?token=' . urlencode($token);
                 $safeName = escape($user['name'] ?? 'there');
@@ -128,8 +151,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $error = 'An error occurred. Please try again later.';
         }
     }
+    }
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -142,6 +165,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
 </head>
 <body class="auth-page">
+<div class="auth-page-inner">
 <div class="recovery-container">
     <div class="recovery-card">
         <div class="recovery-card-header">
@@ -201,6 +225,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             </div>
         </div>
     </div>
+</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>

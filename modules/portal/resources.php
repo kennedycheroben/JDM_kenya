@@ -6,6 +6,13 @@ $userName = $_SESSION['user_name'] ?? null;
 
 $isLoggedIn = !empty($userRole);
 $isMemberPortal = ($userRole === 'member' || $userRole === 'admin' || $userRole === 'super_admin');
+$currentPage = basename($_SERVER['PHP_SELF']);
+if (!function_exists('navActive')) {
+    function navActive($page) {
+        global $currentPage;
+        return $currentPage === $page ? 'active' : '';
+    }
+}
 
 $categoryParam = strtolower(trim($_GET['category'] ?? ''));
 $categoryMap = [
@@ -94,11 +101,15 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
                     <tbody>
                         <?php foreach ($resources as $r): ?>
                             <?php
-                                $icon = match(($r['category'] ?? 'pdf_resource')) {
-                                    'study_material' => 'bi-book text-primary',
-                                    'video_content' => 'bi-play-circle text-success',
-                                    default => 'bi-file-earmark-pdf text-danger'
-                                };
+                                $icon = 'bi-file-earmark-pdf text-danger';
+                                switch(($r['category'] ?? 'pdf_resource')) {
+                                    case 'study_material':
+                                        $icon = 'bi-book text-primary';
+                                        break;
+                                    case 'video_content':
+                                        $icon = 'bi-play-circle text-success';
+                                        break;
+                                }
                             ?>
                             <tr>
                                 <td><i class="bi <?= $icon ?>"></i> <?= escape($r['title'] ?? 'Resource') ?></td>
@@ -142,14 +153,64 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
     <title>JDM Kenya | Resources</title>
     <link href="https://fonts.googleapis.com" rel="preconnect">
     <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/animated-scroll.css">
     <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/images/jdm_logo.png">
 </head>
 <body>
-<main style="padding-top: 20px;">
+
+<div id="cursor"></div>
+<div id="cursor-blur"></div>
+
+<header id="header" class="header fixed-top">
+    <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
+        <a href="index.php" class="logo d-flex align-items-center">
+            <img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img" style="height: 40px; width: auto;">
+            <h1 class="sitename ms-2">JDM Kenya</h1>
+        </a>
+        <nav id="navmenu" class="navmenu">
+            <ul>
+                <li><a href="index.php" class="<?= navActive('index.php') ?>">Home</a></li>
+                <li><a href="about.php" class="<?= navActive('about.php') ?>">About</a></li>
+                <li><a href="activities.php" class="<?= navActive('activities.php') ?>">Events</a></li>
+                <li><a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
+                <li><a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
+                <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
+                    <li><a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a></li>
+                <?php elseif ($userRole === 'member'): ?>
+                    <li><a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
+                <?php else: ?>
+                    <li><a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a></li>
+                <?php endif; ?>
+            </ul>
+            <button class="hamburger d-xl-none" type="button" aria-label="Toggle mobile menu">
+                <span class="bar"></span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+<nav class="mobile-nav" aria-label="Mobile navigation">
+    <a href="index.php" class="<?= navActive('index.php') ?>">Home</a>
+    <a href="about.php" class="<?= navActive('about.php') ?>">About</a>
+    <a href="activities.php" class="<?= navActive('activities.php') ?>">Events</a>
+    <a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a>
+    <a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a>
+    <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
+        <a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a>
+    <?php elseif ($userRole === 'member'): ?>
+        <a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a>
+    <?php else: ?>
+        <a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a>
+    <?php endif; ?>
+</nav>
+
+<div id="smooth-wrapper">
+<div id="smooth-content">
+<main style="padding-top: 80px;">
         <section class="container py-5">
             <div class="mb-5">
                 <h1 class="section-heading mb-3">Resource Library</h1>
@@ -200,11 +261,15 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
                                     <div class="card-body">
                                         <div class="d-flex align-items-start mb-3">
                                             <?php
-                                                $icon = match(($resource['category'] ?? 'pdf_resource')) {
-                                                    'study_material' => 'bi-book text-primary',
-                                                    'video_content' => 'bi-play-circle text-success',
-                                                    default => 'bi-file-earmark-pdf text-danger'
-                                                };
+                                                $icon = 'bi-file-earmark-pdf text-danger';
+                                                switch(($resource['category'] ?? 'pdf_resource')) {
+                                                    case 'study_material':
+                                                        $icon = 'bi-book text-primary';
+                                                        break;
+                                                    case 'video_content':
+                                                        $icon = 'bi-play-circle text-success';
+                                                        break;
+                                                }
                                             ?>
                                             <i class="bi <?= $icon ?>" style="font-size: 1.5rem;"></i>
                                             <div class="ms-3 flex-grow-1">
@@ -273,17 +338,7 @@ $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at 
         </section>
 </main>
 
-<footer class="footer bg-white border-top mt-5">
-    <div class="container text-center py-4">
-        <p class="mb-1">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
-        <p class="text-muted mb-0">Building a discipleship movement with faith, clarity, and service.</p>
-        <div class="d-flex justify-content-center gap-3 mt-3">
-            <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="text-secondary hover-text-primary" title="Facebook"><i class="bi bi-facebook fs-5"></i></a>
-            <a href="#" target="_blank" class="text-secondary hover-text-danger" title="Instagram"><i class="bi bi-instagram fs-5"></i></a>
-            <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="text-secondary hover-text-dark" title="TikTok"><i class="bi bi-tiktok fs-5"></i></a>
-        </div>
-    </div>
-</footer>
+<?php include dirname(__DIR__) . '/public/footer.php'; ?>
 
 <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 <div id="preloader"></div>

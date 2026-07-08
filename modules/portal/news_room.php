@@ -24,7 +24,7 @@ ob_start();
 
 <style>
     .newsroom-header {
-        background: linear-gradient(135deg, #219a43 0%, #1a7a35 100%);
+        background: linear-gradient(135deg, #2C5EAD 0%, #1591DC 100%);
         color: white;
         border-radius: 12px;
         padding: 1.5rem 2rem;
@@ -55,7 +55,7 @@ ob_start();
     .date-badge {
         font-size: 0.75rem;
         background: rgba(33,154,67,0.1);
-        color: #219a43;
+        color: #2C5EAD;
         padding: 2px 8px;
         border-radius: 20px;
         font-weight: 600;

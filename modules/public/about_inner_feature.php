@@ -198,14 +198,19 @@ if ($isMemberPortal) {
         <title><?= htmlspecialchars($page_title) ?></title>
         <link href="https://fonts.googleapis.com" rel="preconnect">
         <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&family=Raleway:wght@500;700&family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
         <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
         <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
         <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/css/style.css') ?>">
         <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/about.css?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/css/about.css') ?>">
+        <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/animated-scroll.css?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/css/animated-scroll.css') ?>">
         <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/images/jdm_logo.png">
     </head>
     <body>
+
+    <div id="cursor"></div>
+    <div id="cursor-blur"></div>
+
     <header id="header" class="header fixed-top">
         <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
             <a href="index.php" class="logo d-flex align-items-center">
@@ -216,7 +221,7 @@ if ($isMemberPortal) {
                 <ul>
                     <li><a href="index.php" class="<?= navActive('index.php') ?>">Home</a></li>
                     <li><a href="about.php" class="<?= navActive('about.php') ?>">About</a></li>
-                    <li><a href="activities.php" class="<?= navActive('activities.php') ?>">Activities</a></li>
+                    <li><a href="activities.php" class="<?= navActive('activities.php') ?>">Events</a></li>
                     <li><a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
                     <li><a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
                     <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
@@ -227,12 +232,32 @@ if ($isMemberPortal) {
                         <li><a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a></li>
                     <?php endif; ?>
                 </ul>
-                <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
-            </nav>
-        </div>
-    </header>
+            <button class="hamburger d-xl-none" type="button" aria-label="Toggle mobile menu">
+                <span class="bar"></span>
+            </button>
+        </nav>
+    </div>
+</header>
 
-    <!-- Hero Banner -->
+<nav class="mobile-nav" aria-label="Mobile navigation">
+    <a href="index.php" class="<?= navActive('index.php') ?>">Home</a>
+    <a href="about.php" class="<?= navActive('about.php') ?>">About</a>
+    <a href="activities.php" class="<?= navActive('activities.php') ?>">Events</a>
+    <a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a>
+    <a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a>
+    <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
+        <a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a>
+    <?php elseif ($userRole === 'member'): ?>
+        <a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a>
+    <?php else: ?>
+        <a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a>
+    <?php endif; ?>
+</nav>
+
+<div id="smooth-wrapper">
+<div id="smooth-content">
+
+<!-- Hero Banner -->
     <section class="page-hero about-hero">
         <div class="container h-100 d-flex align-items-center justify-content-center">
             <div class="text-center text-white">
@@ -246,17 +271,7 @@ if ($isMemberPortal) {
         <?= $content ?>
     </main>
 
-    <footer class="footer bg-white border-top mt-auto">
-        <div class="container text-center">
-            <p class="mb-1">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
-            <p class="text-muted mb-0">Building a discipleship movement with faith, clarity, and service.</p>
-            <div class="d-flex justify-content-center gap-3 mt-3">
-                <a href="https://www.facebook.com/share/1DuVRA4Qph/" target="_blank" class="text-secondary hover-text-primary" title="Facebook"><i class="bi bi-facebook fs-5"></i></a>
-                <a href="#" target="_blank" class="text-secondary hover-text-danger" title="Instagram"><i class="bi bi-instagram fs-5"></i></a>
-                <a href="https://vm.tiktok.com/ZS9jGEtHaDFBC-dncuF/" target="_blank" class="text-secondary hover-text-dark" title="TikTok"><i class="bi bi-tiktok fs-5"></i></a>
-            </div>
-        </div>
-    </footer>
+    <?php include __DIR__ . '/footer.php'; ?>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
     <script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>

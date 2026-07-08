@@ -9,27 +9,31 @@ if (isset($_SESSION['user_role'])) {
 $error = '';
 $success = '';
 $reset_success = isset($_GET['reset_success']) && $_GET['reset_success'] === '1';
+$registration_pending = isset($_GET['registration']) && $_GET['registration'] === 'pending';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_csrf();
+    if (!require_csrf()) { $error = $_SESSION['csrf_error'] ?? 'Session expired. Please reload.'; unset($_SESSION['csrf_error']); }
+    elseif (!check_rate_limit('login', 5, 300)) { $error = 'Too many login attempts. Please try again in 5 minutes.'; }
+    else {
     $email = trim($_POST['email'] ?? '');
-    $password = trim($_POST['password'] ?? '');
+    $password = $_POST['password'] ?? '';
 
     if ($email === '' || $password === '') {
         $error = 'Please enter both email and password.';
     } else {
-        $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($password, $user['password'])) {
             // =====================================================================
-            // OFFICE BEARER APPROVAL CHECK
+            // APPROVAL CHECK
             // =====================================================================
-            // Partners (Office Bearers) must be approved by Super Admin before
+            // Partners (Office Bearers) and Missionaries must be approved by Super Admin before
             // they can access the full dashboard. Redirect to pending page if not approved.
-            if ($user['category'] === 'partner' && (!isset($user['is_approved']) || !$user['is_approved'])) {
-                $error = 'Your account is pending Super Admin approval. You will receive a notification once approved.';
+            if (in_array($user['category'], ['partner', 'missionary']) && empty($user['is_approved'])) {
+                $label = $user['category'] === 'partner' ? 'Office Bearer' : 'Missionary';
+                $error = "Your {$label} registration is pending JDM leadership approval. You will receive a notification once approved.";
             } else {
                 // =====================================================================
                 // LOGIN SUCCESSFUL: Set session variables
@@ -58,11 +62,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $error = 'Invalid email or password. Please try again.';
         }
     }
+    }
 }
 
 // Show success message if password was reset
 if ($reset_success) {
     $success = 'Password reset successfully! You can now sign in with your new password.';
+}
+
+// Show confirmation message after registration for partner/missionary
+if ($registration_pending) {
+    $success = 'Your application has been submitted successfully! You will receive a notification once JDM leadership reviews and approves your registration.';
 }
 ?>
 <!DOCTYPE html>
@@ -73,61 +83,80 @@ if ($reset_success) {
     <title>JDM Kenya | Sign In</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
 </head>
-<body>
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-7 col-lg-5">
-            <div class="card shadow-sm">
-                <div class="card-body p-4">
-                    <h3 class="mb-3">Member Login</h3>
-                    <p class="text-muted">Sign in to access member resources and the JDM portal.</p>
-                    <?php if ($success): ?>
-                        <div class="alert alert-success alert-dismissible fade show">
-                            <i class="fas fa-check-circle"></i> <?= escape($success) ?>
-                            <button class="btn-close" data-bs-dismiss="alert"></button>
+<body class="auth-page">
+<div class="auth-page-inner">
+    <div class="recovery-container">
+        <div class="card-flip-wrap">
+            <div class="card-flip-inner" id="loginCardInner">
+                <div class="card-flip-front">
+                    <div class="recovery-card">
+                        <div class="recovery-card-header">
+                            <h3>Member Login</h3>
+                            <p>Sign in to access member resources and the JDM Dashboard.</p>
                         </div>
-                    <?php endif; ?>
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger alert-dismissible fade show">
-                            <i class="fas fa-exclamation-circle"></i> <?= escape($error) ?>
-                            <button class="btn-close" data-bs-dismiss="alert"></button>
+                        <div class="recovery-card-body">
+                            <?php if ($success): ?>
+                                <div class="alert alert-success alert-dismissible fade show">
+                                    <i class="fas fa-check-circle"></i> <?= escape($success) ?>
+                                    <button class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($error): ?>
+                                <div class="alert alert-danger alert-dismissible fade show">
+                                    <i class="fas fa-exclamation-circle"></i> <?= escape($error) ?>
+                                    <button class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            <?php endif; ?>
+                            <form method="post" novalidate>
+                                <?= csrf_field() ?>
+                                <div class="auth-floating-group">
+                                    <input type="email" name="email" class="form-control auth-floating-input" placeholder=" " value="" required>
+                                    <label class="auth-floating-label">Email address</label>
+                                </div>
+                                <div class="auth-floating-group">
+                                    <input type="password" name="password" class="form-control auth-floating-input" placeholder=" " required>
+                                    <label class="auth-floating-label">Password</label>
+                                    <small class="text-muted d-block mt-2">
+                                        <a href="forgot_password.php" class="text-decoration-underline small">Forgot your password?</a>
+                                    </small>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Sign In</button>
+                            </form>
                         </div>
-                    <?php endif; ?>
-                    <form method="post" novalidate>
-                        <?= csrf_field() ?>
-                        <div class="mb-3">
-                            <label class="form-label">Email address</label>
-                            <input type="email" name="email" class="form-control" required>
+                        <div class="recovery-footer">
+                            <p class="mb-0">New to JDM? <a href="signup.php">Create an account</a></p>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Password</label>
-                            <input type="password" name="password" class="form-control" required>
-                            <small class="text-muted d-block mt-1">
-                                <a href="forgot_password.php" class="text-decoration-underline small">Forgot your password?</a>
-                            </small>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Sign In</button>
-                    </form>
-                    <div class="mt-4 text-center">
-                        <p class="mb-0">New to JDM? <a href="signup.php">Create an account</a></p>
                     </div>
+                </div>
+                <div class="card-flip-back">
+                    <div class="back-logo"><i class="bi bi-cross"></i></div>
+                    <h3>JDM Kenya</h3>
+                    <p>Building a discipleship movement with faith, clarity, and service.</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
-<footer class="footer bg-white border-top mt-5">
-    <div class="container text-center">
-        <p class="mb-1">&copy; <?= date('Y') ?> Jesus Disciple Movement of Kenya</p>
-        <p class="text-muted mb-0">Building a discipleship movement with faith, clarity, and service.</p>
-    </div>
-</footer>
+<?php include dirname(__DIR__) . '/public/footer.php'; ?>
 <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 <div id="preloader"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    gsap.set('#loginCardInner', { rotationY: 180 });
+    gsap.to('#loginCardInner', {
+        rotationY: 0,
+        duration: 1.2,
+        ease: 'power4.out',
+        delay: 0.3
+    });
+});
+</script>
 <script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
 </body>
 </html>

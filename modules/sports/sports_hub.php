@@ -78,7 +78,7 @@ ob_start();
 
 <!-- Hero Section -->
 <div class="row mb-4 position-relative rounded-4 overflow-hidden shadow-sm" style="height: 250px; background: #000;">
-    <img src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?q=80&w=2000&auto=format&fit=crop" class="position-absolute w-100 h-100" style="object-fit: cover; opacity: 0.6; z-index: 0;" alt="Football Player with ball">
+    <img src="<?= BASE_PATH ?>/images/african-football.jpg" class="position-absolute w-100 h-100" style="object-fit: cover; opacity: 0.6; z-index: 0;" alt="Football match in Africa">
     <div class="position-absolute w-100 h-100 d-flex flex-column justify-content-center px-4" style="z-index: 1;">
         <h2 class="text-white fw-bold display-5 mb-0">Sports Ministry</h2>
         <p class="text-light lead">Connecting disciples through faith, fitness, and fellowship.</p>
@@ -145,7 +145,7 @@ ob_start();
             <div class="card-body">
                 <ul class="nav nav-pills mb-3 nav-fill" id="pills-tab" role="tablist">
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link active rounded-pill px-4" style="background-color: #198754;" id="pills-goals-tab" data-bs-toggle="pill" data-bs-target="#pills-goals" type="button" role="tab" aria-selected="true">Top Scorers</button>
+                        <button class="nav-link active rounded-pill px-4" style="background-color: #2C5EAD;" id="pills-goals-tab" data-bs-toggle="pill" data-bs-target="#pills-goals" type="button" role="tab" aria-selected="true">Top Scorers</button>
                     </li>
                 </ul>
                 <div class="tab-content" id="pills-tabContent">

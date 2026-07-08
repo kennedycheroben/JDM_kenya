@@ -7,6 +7,10 @@ if (!function_exists('site_base_url')) {
         $scheme = $https ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
+        if (strpos($host, 'localhost') !== false || strpos($host, '127.0.0.1') !== false) {
+            return $scheme . '://' . $host . '/JDM_kenya';
+        }
+
         if (defined('SITE_URL') && SITE_URL !== '') {
             $siteUrl = rtrim((string)SITE_URL, '/');
             if (preg_match('#^https?://#i', $siteUrl)) {
@@ -48,11 +52,41 @@ if (!function_exists('send_app_email')) {
             . $htmlBody . "\r\n\r\n"
             . "--{$boundary}--";
 
-        if (defined('SMTP_HOST') && SMTP_HOST !== '') {
-            return send_smtp_email($to, $subject, $message, $headers, $fromEmail, $fromName);
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        $isLocal = strpos($host, 'localhost') !== false 
+            || strpos($host, '127.0.0.1') !== false
+            || PHP_SAPI === 'cli';
+            
+        if ($isLocal) {
+            $logDir = dirname(dirname(__FILE__)) . '/uploads/';
+            if (!is_dir($logDir)) {
+                @mkdir($logDir, 0775, true);
+            }
+            $logFile = $logDir . 'mail_outbox.log';
+            $logEntry = date('Y-m-d H:i:s') . " | TO: {$to} | SUBJECT: {$subject}\n"
+                . "BODY:\n{$plainBody}\n"
+                . "--------------------------------------------------\n\n";
+            @file_put_contents($logFile, $logEntry, FILE_APPEND);
         }
 
-        return mail($to, $encodedSubject, $message, implode("\r\n", $headers));
+        if (defined('SMTP_HOST') && SMTP_HOST !== '') {
+            $smtpSent = send_smtp_email($to, $subject, $message, $headers, $fromEmail, $fromName);
+            if ($smtpSent) {
+                return true;
+            }
+            error_log("send_app_email: SMTP send failed, trying PHP mail() fallback.");
+        }
+
+        $mailSent = @mail($to, $encodedSubject, $message, implode("\r\n", $headers));
+        if ($mailSent) {
+            return true;
+        }
+
+        if ($isLocal) {
+            return true;
+        }
+
+        return false;
     }
 }
 
@@ -66,7 +100,14 @@ if (!function_exists('send_smtp_email')) {
         $timeout = defined('SMTP_TIMEOUT') ? (int)SMTP_TIMEOUT : 15;
         $remote = ($secure === 'ssl' ? 'ssl://' : '') . $host . ':' . $port;
 
-        $socket = @stream_socket_client($remote, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
+        $context = stream_context_create([
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true
+            ]
+        ]);
+        $socket = @stream_socket_client($remote, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
         if (!$socket) {
             error_log("SMTP connection failed: {$errno} {$errstr}");
             return false;

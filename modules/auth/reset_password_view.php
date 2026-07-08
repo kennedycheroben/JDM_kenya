@@ -52,13 +52,35 @@ if (isset($_GET['token']) && !empty($_GET['token'])) {
             // =====================================================================
             // DATABASE LOOKUP: Find user with this hashed token
             // =====================================================================
-            $stmt = $pdo->prepare('
-                SELECT id, name, email 
-                FROM users 
-                WHERE reset_token = ? 
-                LIMIT 1
-            ');
-            $stmt->execute([$token]);
+            try {
+                $stmt = $pdo->prepare('
+                    SELECT id, name, email 
+                    FROM users 
+                    WHERE reset_token = ? 
+                    LIMIT 1
+                ');
+                $stmt->execute([$token]);
+            } catch (PDOException $e) {
+                if ($e->getCode() == '42S22') {
+                    try {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN reset_token VARCHAR(64) NULL DEFAULT NULL");
+                        $pdo->exec("ALTER TABLE users ADD COLUMN token_expires_at DATETIME NULL DEFAULT NULL");
+                        // Retry the query now that columns exist
+                        $stmt = $pdo->prepare('
+                            SELECT id, name, email 
+                            FROM users 
+                            WHERE reset_token = ? 
+                            LIMIT 1
+                        ');
+                        $stmt->execute([$token]);
+                    } catch (PDOException $e2) {
+                        error_log("Password reset column migration error: " . $e2->getMessage());
+                        throw $e2;
+                    }
+                } else {
+                    throw $e;
+                }
+            }
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($user) {
@@ -105,7 +127,8 @@ if (isset($_GET['token']) && !empty($_GET['token'])) {
 // =========================================================================
 // Only process if token is valid AND user submitted the form
 if ($token_valid && $user && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_csrf();
+    if (!require_csrf()) { $error = $_SESSION['csrf_error'] ?? 'Session expired. Please reload.'; unset($_SESSION['csrf_error']); }
+    else {
     $new_password = trim($_POST['new_password'] ?? '');
     $confirm_password = trim($_POST['confirm_password'] ?? '');
     
@@ -156,8 +179,8 @@ if ($token_valid && $user && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $error = 'An error occurred while resetting your password. Please try again.';
         }
     }
+    }
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -229,8 +252,8 @@ if ($token_valid && $user && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
         
         .form-control:focus {
-            border-color: var(--accent-color, #d4af37);
-            box-shadow: 0 0 0 0.2rem rgba(212, 175, 55, 0.25);
+            border-color: var(--accent-color, #1591DC);
+            box-shadow: 0 0 0 0.2rem rgba(21, 145, 220, 0.25);
         }
         
         .btn-primary {
@@ -243,7 +266,7 @@ if ($token_valid && $user && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
         
         .btn-primary:hover {
-            background: var(--accent-color, #d4af37);
+            background: var(--accent-color, #1591DC);
             color: var(--default-color, #102a54);
         }
         

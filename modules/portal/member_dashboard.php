@@ -17,13 +17,14 @@ $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
 $stmt->execute([$user_id]);
 $member = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// =====================================================================
-// OFFICE BEARER APPROVAL CHECK
-// =====================================================================
-// If this is a partner (office bearer) and not yet approved,
-// show pending approval message instead of full dashboard
-if ($member && $member['category'] === 'partner' && (!isset($member['is_approved']) || !$member['is_approved'])) {
-    // Show pending approval page
+    // =====================================================================
+    // APPROVAL CHECK
+    // =====================================================================
+    // Partners (office bearers) and missionaries must be approved before accessing dashboard
+    $pendingCategories = ['partner', 'missionary'];
+    if ($member && in_array($member['category'], $pendingCategories) && (!isset($member['is_approved']) || !$member['is_approved'])) {
+        $pendingLabel = $member['category'] === 'partner' ? 'Office Bearer' : 'Missionary';
+        // Show pending approval page
     ob_start();
     ?>
     <!DOCTYPE html>
@@ -54,7 +55,7 @@ if ($member && $member['category'] === 'partner' && (!isset($member['is_approved
             }
             
             .pending-header {
-                background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+                background: linear-gradient(135deg, #4BB8FA 0%, #1591DC 100%);
                 color: white;
                 padding: 40px 30px;
                 text-align: center;
@@ -82,12 +83,12 @@ if ($member && $member['category'] === 'partner' && (!isset($member['is_approved
             
             .pending-icon i {
                 font-size: 64px;
-                color: #ffc107;
+                color: #4BB8FA;
             }
             
             .status-box {
                 background: #f8f9fa;
-                border-left: 4px solid #ffc107;
+                border-left: 4px solid #4BB8FA;
                 padding: 20px;
                 border-radius: 4px;
                 margin-bottom: 20px;
@@ -129,8 +130,8 @@ if ($member && $member['category'] === 'partner' && (!isset($member['is_approved
     <body>
         <div class="pending-card">
             <div class="pending-header">
-                <h2>⏳ Pending Approval</h2>
-                <p>Your office bearer registration is under review</p>
+        <h2>⏳ Pending Approval</h2>
+        <p>Your <?= escape($pendingLabel) ?> registration is under review</p>
             </div>
             
             <div class="pending-body">
@@ -139,18 +140,18 @@ if ($member && $member['category'] === 'partner' && (!isset($member['is_approved
                 </div>
                 
                 <div class="status-box">
-                    <h5><i class="fas fa-check-circle" style="color: #ffc107;"></i> Thank You for Registering!</h5>
+                    <h5><i class="fas fa-check-circle" style="color: #4BB8FA;"></i> Thank You for Registering!</h5>
                     <p>
                         Hello <?= escape($member['name']) ?>,
                     </p>
                     <p>
-                        We have received your registration as an Office Bearer in JDM Kenya. 
+                        We have received your registration as a <?= escape($pendingLabel) ?> in JDM Kenya. 
                         Your application is currently being reviewed by our JDM leadership team.
                     </p>
                 </div>
                 
                 <div class="status-box">
-                    <h5><i class="fas fa-clock" style="color: #ffc107;"></i> What Happens Next?</h5>
+                    <h5><i class="fas fa-clock" style="color: #4BB8FA;"></i> What Happens Next?</h5>
                     <p>
                         Our Super Admin will review your application and verify your details. 
                         You will receive a notification via email and in-app message once a decision has been made.
@@ -161,13 +162,13 @@ if ($member && $member['category'] === 'partner' && (!isset($member['is_approved
                 </div>
                 
                 <div class="status-box">
-                    <h5><i class="fas fa-envelope" style="color: #ffc107;"></i> Account Information</h5>
+                    <h5><i class="fas fa-envelope" style="color: #4BB8FA;"></i> Account Information</h5>
                     <p><strong>Email:</strong> <?= escape($member['email']) ?></p>
                     <p class="mb-0"><strong>WhatsApp:</strong> <?= escape($member['whatsapp_phone']) ?></p>
                 </div>
                 
                 <div class="status-box">
-                    <h5><i class="fas fa-question-circle" style="color: #ffc107;"></i> Need Help?</h5>
+                    <h5><i class="fas fa-question-circle" style="color: #4BB8FA;"></i> Need Help?</h5>
                     <p>
                         If you have any questions or need to update your information, 
                         please contact <a href="mailto:admin@jdmkenya.com">JDM leadership</a>.
@@ -231,21 +232,32 @@ ob_start();
             <div class="card-body">
                 <p><strong>Name:</strong> <?= escape($member['name']) ?></p>
                 <p><strong>Email:</strong> <?= escape($member['email']) ?></p>
-                <p><strong>WhatsApp:</strong> <?= escape(maskPhone($member['whatsapp_phone'] ?? '')) ?></p>
+                <p><strong>WhatsApp:</strong> <?= escape($member['whatsapp_phone'] ?? '') ?></p>
                 <p><strong>Category:</strong> 
                     <?php 
-                    $badge = match($member['category']) {
-                        'student' => '<span class="badge bg-info"><i class="bi bi-book"></i> Student</span>',
-                        'associate' => '<span class="badge bg-success"><i class="bi bi-briefcase"></i> Associate</span>',
-                        'partner' => '<span class="badge bg-warning text-dark"><i class="bi bi-briefcase-fill"></i> Office Bearer</span>',
-                        'other' => '<span class="badge bg-secondary">Member</span>',
-                        default => '<span class="badge bg-secondary">Member</span>'
-                    };
+                    $badge = '<span class="badge bg-secondary">Member</span>';
+                    switch($member['category']) {
+                        case 'student':
+                            $badge = '<span class="badge bg-info"><i class="bi bi-book"></i> Student</span>';
+                            break;
+                        case 'associate':
+                            $badge = '<span class="badge bg-success"><i class="bi bi-briefcase"></i> Associate</span>';
+                            break;
+                        case 'partner':
+                            $badge = '<span class="badge bg-warning text-dark"><i class="bi bi-briefcase-fill"></i> Office Bearer</span>';
+                            break;
+                        case 'missionary':
+                            $badge = '<span class="badge text-white" style="background: linear-gradient(135deg, #6366f1, #a855f7) !important; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 2px 4px rgba(168,85,247,0.25);"><i class="bi bi-globe2"></i> Missionary</span>';
+                            break;
+                        case 'other':
+                            $badge = '<span class="badge bg-secondary">Member</span>';
+                            break;
+                    }
                     echo $badge;
                     ?>
                 </p>
                 <p><strong>Member Since:</strong> <?= date('M d, Y', strtotime($member['created_at'])) ?></p>
-                <a href="contact.php" class="btn btn-sm btn-primary mt-2">
+                <a href="profile.php" class="btn btn-sm btn-primary mt-2">
                     <i class="bi bi-pencil"></i> Update Information
                 </a>
             </div>
@@ -260,7 +272,7 @@ ob_start();
             <div class="card-body">
                 <p><strong>Account Status:</strong> <span class="badge bg-success">Active</span></p>
                 <p><strong>Role:</strong> <span class="badge bg-primary">Member</span></p>
-                <p><strong>Access Level:</strong> Full Member Portal Access</p>
+                <p><strong>Access Level:</strong> Full Member dashboard Access</p>
                 <hr>
                 <p class="text-muted small mb-0">You have access to all member resources, activities, and community features. Stay connected with us!</p>
             </div>
@@ -359,7 +371,7 @@ ob_start();
                             <div class="col-md-6 col-lg-4">
                                 <div class="card h-100 shadow-sm">
                                     <div class="card-body text-center">
-                                        <i class="bi bi-file-pdf" style="font-size: 3rem; color: #dc3545;"></i>
+                                        <i class="bi bi-file-pdf" style="font-size: 3rem; color: #2C5EAD;"></i>
                                         <h6 class="card-title mt-3"><?= escape($resource['title']) ?></h6>
                                         <small class="text-muted d-block mb-3"><?= date('M d, Y', strtotime($resource['upload_date'])) ?></small>
                                     </div>

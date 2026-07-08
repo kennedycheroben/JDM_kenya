@@ -13,11 +13,21 @@ $userRole = $_SESSION['user_role'] ?? '';
 $isGbsLeader = false;
 
 // Check if user is GBS leader
-$stmt = $pdo->prepare("SELECT is_gbs_leader FROM users WHERE id = ?");
-$stmt->execute([$userId]);
-$userData = $stmt->fetch(PDO::FETCH_ASSOC);
-if ($userData) {
-    $isGbsLeader = (bool)$userData['is_gbs_leader'];
+$isGbsLeader = false;
+try {
+    $stmt = $pdo->prepare("SELECT is_gbs_leader FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($userData) {
+        $isGbsLeader = (bool)$userData['is_gbs_leader'];
+    }
+} catch (PDOException $e) {
+    // Column may not exist yet; fall back to gbs_members check
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gbs_members WHERE user_id = ? AND role = 'leader'");
+        $stmt->execute([$userId]);
+        $isGbsLeader = (bool)$stmt->fetchColumn();
+    } catch (PDOException $ignored) {}
 }
 
 if (!$isGbsLeader) {

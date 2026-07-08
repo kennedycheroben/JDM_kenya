@@ -458,17 +458,27 @@ ob_start();
 
         // --- WebSocket Initialization ---
         let ws = null;
+        let wsReconnectTimer = null;
+        let wsEnabled = true;
         let typingTimeout = null;
         const typingIndicator = document.getElementById('typingIndicator');
-        const WsHost = window.location.hostname;
+        // Use WSS when page is HTTPS, WS when HTTP
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsHost = window.location.hostname;
         // Connect to FastAPI WebSocket Server
         function connectWebSocket() {
-            ws = new WebSocket(`ws://${WsHost}:8000/ws/${meId}`);
+            if (!wsEnabled) return;
+            try {
+                ws = new WebSocket(`${wsProtocol}://${wsHost}:8000/ws/${meId}`);
+            } catch (e) {
+                console.log('WebSocket not available, using polling only.');
+                wsEnabled = false;
+                return;
+            }
             
             ws.onopen = () => {
                 console.log('WebSocket connected. Real-time enabled.');
                 status.textContent = '';
-                // Tell server we've read any pending messages from this user
                 ws.send(JSON.stringify({
                     type: 'seen',
                     chat_partner_id: withId
@@ -476,78 +486,72 @@ ob_start();
             };
             
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                
-                if (data.type === 'chat_message') {
-                    // Incoming message from chat partner
-                    if (data.sender_id === withId) {
-                        if (data.msg_id && chatBox.querySelector(`[data-mid="${data.msg_id}"]`)) {
-                            return;
-                        }
-                        renderMessage({
-                            id: data.msg_id,
-                            sender_id: data.sender_id,
-                            message_text: data.message_text,
-                            created_at: data.timestamp,
-                            sender_name: 'Partner'
-                        });
-                        if (parseInt(data.msg_id || '0', 10) > lastMessageId) {
-                            lastMessageId = parseInt(data.msg_id, 10);
-                        }
-                        scrollToBottom();
-                        
-                        // Immediately acknowledge delivery
-                        ws.send(JSON.stringify({
-                            type: 'acknowledged',
-                            msg_id: data.msg_id
-                        }));
-                        
-                        // Since we are active in this chat, also send seen
-                        ws.send(JSON.stringify({
-                            type: 'seen',
-                            chat_partner_id: withId
-                        }));
-                    } else {
-                        // Incoming message from someone else, update their badge
-                        fetchUnreadCountsOnLoad();
-                    }
-                } else if (data.type === 'message_status') {
-                    // Update single message status (sent/delivered)
-                    const statusIcon = document.querySelector(`.msg-status[data-status-mid="${data.msg_id}"]`);
-                    if (statusIcon) {
-                        statusIcon.innerHTML = svgs[data.status];
-                    }
-                } else if (data.type === 'bulk_message_status') {
-                    // Update all unread messages from this receiver to 'read' (double blue ticks)
-                    if (data.receiver_id === withId) {
-                        const allTicks = chatBox.querySelectorAll('.msg-status');
-                        allTicks.forEach(tick => {
-                            if (tick.innerHTML !== svgs['read']) {
-                                tick.innerHTML = svgs['read'];
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'chat_message') {
+                        if (data.sender_id === withId) {
+                            if (data.msg_id && chatBox.querySelector(`[data-mid="${data.msg_id}"]`)) {
+                                return;
                             }
-                        });
+                            renderMessage({
+                                id: data.msg_id,
+                                sender_id: data.sender_id,
+                                message_text: data.message_text,
+                                created_at: data.timestamp,
+                                sender_name: 'Partner'
+                            });
+                            if (parseInt(data.msg_id || '0', 10) > lastMessageId) {
+                                lastMessageId = parseInt(data.msg_id, 10);
+                            }
+                            scrollToBottom();
+                            ws.send(JSON.stringify({ type: 'acknowledged', msg_id: data.msg_id }));
+                            ws.send(JSON.stringify({ type: 'seen', chat_partner_id: withId }));
+                        } else {
+                            fetchUnreadCountsOnLoad();
+                        }
+                    } else if (data.type === 'message_status') {
+                        const statusIcon = document.querySelector(`.msg-status[data-status-mid="${data.msg_id}"]`);
+                        if (statusIcon) statusIcon.innerHTML = svgs[data.status];
+                    } else if (data.type === 'bulk_message_status') {
+                        if (data.receiver_id === withId) {
+                            document.querySelectorAll('.msg-status').forEach(tick => {
+                                if (tick.innerHTML !== svgs['read']) tick.innerHTML = svgs['read'];
+                            });
+                        }
+                    } else if (data.type === 'typing') {
+                        if (data.sender_id === withId && data.is_typing) {
+                            typingIndicator.style.display = 'block';
+                            clearTimeout(typingTimeout);
+                            typingTimeout = setTimeout(() => { typingIndicator.style.display = 'none'; }, 2000);
+                        }
                     }
-                } else if (data.type === 'typing') {
-                    // Show typing indicator
-                    if (data.sender_id === withId && data.is_typing) {
-                        typingIndicator.style.display = 'block';
-                        clearTimeout(typingTimeout);
-                        typingTimeout = setTimeout(() => {
-                            typingIndicator.style.display = 'none';
-                        }, 2000);
-                    }
+                } catch (e) {
+                    console.error('WebSocket message error:', e);
                 }
             };
             
             ws.onclose = () => {
-                console.log('WebSocket disconnected. Reconnecting in 3s...');
-                setTimeout(connectWebSocket, 3000);
+                console.log('WebSocket disconnected.');
+                if (wsEnabled) {
+                    clearTimeout(wsReconnectTimer);
+                    wsReconnectTimer = setTimeout(connectWebSocket, 5000);
+                }
+            };
+            
+            ws.onerror = () => {
+                console.log('WebSocket error - falling back to polling.');
+                wsEnabled = false;
+                if (ws) ws.close();
             };
         }
         
-        connectWebSocket();
+        // Only attempt WebSocket if the chat partner is selected
+        if (hasWith) {
+            connectWebSocket();
+        }
 
-        // Typing Detection Handler
+        // Typing Detection Handler (only if WebSocket is connected)
         input.addEventListener('input', () => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({

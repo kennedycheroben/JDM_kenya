@@ -214,7 +214,7 @@ ob_start();
                                 <?php endif; ?>
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1"><?= escape($member['name']) ?></h6>
-                                    <small class="text-muted"><?= escape($member['email']) ?></small>
+                                    <small class="text-muted"><?= escape(maskEmail($member['email'] ?? '')) ?></small>
                                     <div>
                                         <span class="badge bg-<?= $member['role'] === 'leader' ? 'danger' : 'secondary' ?> small">
                                             <?= ucfirst($member['role']) ?>
@@ -464,7 +464,7 @@ ob_start();
                             $available_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             foreach ($available_users as $user):
                             ?>
-                                <option value="<?= $user['id'] ?>"><?= escape($user['name']) ?> (<?= escape($user['email']) ?>)</option>
+                                <option value="<?= $user['id'] ?>"><?= escape($user['name']) ?> (<?= escape(maskEmail($user['email'] ?? '')) ?>)</option>
                             <?php endforeach; ?>
                         </select>
                     </div>

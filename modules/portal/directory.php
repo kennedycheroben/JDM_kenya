@@ -7,10 +7,14 @@ if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'member' && $_S
 }
 
 $is_super_admin = ($_SESSION['user_role'] === 'super_admin');
-if ($is_super_admin) {
+$can_view_contact = in_array($_SESSION['user_role'] ?? '', ['admin', 'super_admin']);
+$user_role = $_SESSION['user_role'] ?? 'member';
+if ($user_role === 'super_admin') {
     $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-} else {
+} elseif ($user_role === 'admin') {
     $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category NOT IN ('partner', 'missionary') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 }
 
 ob_start();
@@ -37,10 +41,7 @@ ob_start();
                     <?php endif; ?>
                     <div class="flex-grow-1">
                         <div class="fw-semibold"><?= escape($m['name']) ?></div>
-                        <?php 
-                        $can_view_phone = in_array($_SESSION['user_role'] ?? '', ['admin', 'super_admin']) || !empty($_SESSION['is_gbs_leader']);
-                        if ($can_view_phone): 
-                        ?>
+                        <?php if ($can_view_contact): ?>
                         <div class="small">
                             <a href="<?= escape(waLink($m['whatsapp_phone'] ?? '')) ?>" target="_blank" rel="noopener">
                                 <i class="bi bi-whatsapp"></i> <?= escape($m['whatsapp_phone'] ?? '') ?>

@@ -166,13 +166,12 @@ class BirthdayEngine:
             'type': 'birthday_celebration',
             'user_id': user['id'],
             'user_name': user['name'],
-            'age': age,
-            'message': f"🎉🎂 Happy {age}th Birthday to {user['name']}! 🎂🎉",
+            'message': f"🎉🎂 Happy Birthday to {user['name']}! 🎂🎉",
             'celebration_popup': True,
             'timestamp': datetime.now().isoformat()
         }
         
-        logger.info(f"🎂 Celebrating birthday: {user['name']} is now {age} years old!")
+        logger.info(f"🎂 Celebrating birthday: {user['name']}!")
         
         # This would be sent via WebSocket to all connected clients
         # For now, we'll log it and store in database

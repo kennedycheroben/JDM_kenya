@@ -10,45 +10,48 @@ if (isset($_SESSION['user_role']) && !empty($_SESSION['user_role'])) {
 $error = '';
 $success = '';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_csrf();
+    if (!require_csrf()) { $error = $_SESSION['csrf_error'] ?? 'Session expired.'; unset($_SESSION['csrf_error']); }
+    elseif (!check_rate_limit('signup', 3, 900)) { $error = 'Too many registration attempts. Please try again later.'; }
+    else {
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
-    $whatsappPhone = trim($_POST['whatsapp_phone'] ?? '');
     $category = strtolower(trim($_POST['category'] ?? ''));
-        $campusName = trim($_POST['campus_name'] ?? '');
-        $graduationYear = trim($_POST['graduation_year'] ?? '');
-        $currentProfession = trim($_POST['current_profession'] ?? '');
-    $password = trim($_POST['password'] ?? '');
-    $confirm = trim($_POST['confirm_password'] ?? '');
-    
-    // Birthday fields
+    $whatsappPhone = trim($_POST['whatsapp_phone'] ?? '');
+    $campusName = trim($_POST['campus_name'] ?? '');
+    $graduationYear = trim($_POST['graduation_year'] ?? '');
+    $currentProfession = trim($_POST['current_profession'] ?? '');
+    $missionaryType = trim($_POST['missionary_type'] ?? '');
+    $country = trim($_POST['country'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $confirm = $_POST['confirm_password'] ?? '';
+
     $birthYear = (int)($_POST['birth_year'] ?? 0);
     $birthMonth = (int)($_POST['birth_month'] ?? 0);
     $birthDay = (int)($_POST['birth_day'] ?? 0);
 
-    $allowedCategories = ['student', 'associate', 'partner', 'other'];
+    $allowedCategories = ['student', 'associate', 'partner', 'missionary', 'other'];
     $allowedCampuses = ['Main Campus', 'Upper Kabete', 'Lower Kabete', 'Chiromo', 'Kikuyu', 'Parklands'];
 
-    if ($name === '' || $email === '' || $whatsappPhone === '' || $category === '' || $password === '' || $confirm === '') {
-        $error = 'All fields are required.';
-    } elseif ($birthYear === 0 || $birthMonth === 0 || $birthDay === 0) {
-        $error = 'Please select your complete date of birth.';
-    } elseif (!checkdate($birthMonth, $birthDay, $birthYear)) {
-        $error = 'Please enter a valid date of birth.';
-    } elseif ($birthYear < 1920 || $birthYear > (int)date('Y') - 13) {
-        $error = 'Please enter a valid birth year.';
+    if ($name === '' || $email === '' || $category === '' || $password === '' || $confirm === '') {
+        $error = 'Please fill in all required fields.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please provide a valid email address.';
-    } elseif ($category === 'associate' && ($graduationYear === '' || $currentProfession === '')) {
-        $error = 'Please provide graduation year and current profession for this category.';
     } elseif (!in_array($category, $allowedCategories, true)) {
         $error = 'Please select a valid member category.';
     } elseif ($category === 'student' && !in_array($campusName, $allowedCampuses, true)) {
         $error = 'Please select a valid campus for students.';
+    } elseif ($category === 'associate' && ($graduationYear === '' || $currentProfession === '')) {
+        $error = 'Please provide graduation year and current profession for this category.';
+    } elseif ($category === 'missionary' && $country === '') {
+        $error = 'Please select your country of origin.';
+    } elseif ($category !== 'missionary' && $whatsappPhone === '') {
+        $error = 'WhatsApp phone number is required.';
+    } elseif ($birthYear !== 0 && (!checkdate($birthMonth, $birthDay, $birthYear) || $birthYear < 1920 || $birthYear > (int)date('Y') - 13)) {
+        $error = 'Please enter a valid date of birth.';
     } elseif ($password !== $confirm) {
         $error = 'Passwords do not match.';
     } else {
-        $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
         $stmt->execute([$email]);
         if ($stmt->fetch()) {
             $error = 'That email is already registered.';
@@ -56,9 +59,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $hash = password_hash($password, PASSWORD_DEFAULT);
             try {
                 $pdo->beginTransaction();
-                $dateOfBirth = sprintf('%04d-%02d-%02d', $birthYear, $birthMonth, $birthDay);
-                
-                // Sanitize and capture the new Partner (Office Bearer) specialized fields
+                $dateOfBirth = ($birthYear !== 0 && $birthMonth !== 0 && $birthDay !== 0)
+                    ? sprintf('%04d-%02d-%02d', $birthYear, $birthMonth, $birthDay)
+                    : null;
+
                 $gradYearParam = null;
                 $campusRoleParam = null;
                 $employmentStatusParam = null;
@@ -68,26 +72,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $contributionPhoneParam = null;
 
                 if ($category === 'partner') {
-                    // Extract and prepare values from POST (PDO prepared statements handle SQL injection)
                     $gradYearParam = !empty($_POST['partner_graduation_year']) ? (int)$_POST['partner_graduation_year'] : null;
                     $campusRoleParam = !empty($_POST['partner_campus_role']) ? trim($_POST['partner_campus_role']) : null;
-                    
+
                     $empStatusRaw = !empty($_POST['partner_employment_status']) ? trim($_POST['partner_employment_status']) : null;
                     if ($empStatusRaw === 'Other' && !empty($_POST['partner_employment_status_other'])) {
                         $employmentStatusParam = trim($_POST['partner_employment_status_other']);
                     } else {
                         $employmentStatusParam = $empStatusRaw ?: null;
                     }
-                    
+
                     $companyNameParam = !empty($_POST['partner_company_name']) ? trim($_POST['partner_company_name']) : null;
-                    
+
                     $indProfRaw = !empty($_POST['partner_industry_profession']) ? trim($_POST['partner_industry_profession']) : null;
                     if ($indProfRaw === 'Other' && !empty($_POST['partner_industry_profession_other'])) {
                         $industryProfessionParam = trim($_POST['partner_industry_profession_other']);
                     } else {
                         $industryProfessionParam = $indProfRaw ?: null;
                     }
-                    
+
                     $partnershipFocusParam = !empty($_POST['partner_partnership_focus']) ? trim($_POST['partner_partnership_focus']) : null;
                     $contributionPhoneParam = !empty($_POST['partner_contribution_phone']) ? trim($_POST['partner_contribution_phone']) : null;
                 } elseif ($category === 'associate') {
@@ -95,25 +98,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $industryProfessionParam = $currentProfession !== '' ? trim($currentProfession) : null;
                 }
 
-                // =====================================================================
-                // OFFICE BEARER APPROVAL WORKFLOW
-                // =====================================================================
-                // Partners (Office Bearers) must be approved by Super Admin before
-                // they can access the full dashboard. Set is_approved = 0 for partners.
-                $isApproved = ($category === 'partner') ? 0 : 1;
-                
-                // Insert into main users table with both basic info and conditional partner/office bearer fields
+                $isApproved = ($category === 'partner' || $category === 'missionary') ? 0 : 1;
+
                 $insert = $pdo->prepare('
                     INSERT INTO users (
                         name, email, whatsapp_phone, password, role, category, date_of_birth,
                         graduation_year, campus_role, employment_status, company_name,
-                        industry_profession, partnership_focus, contribution_phone, is_approved
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        industry_profession, partnership_focus, contribution_phone,
+                        is_approved, missionary_type, country
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 ');
                 $insert->execute([
                     $name, $email, $whatsappPhone, $hash, 'member', $category, $dateOfBirth,
                     $gradYearParam, $campusRoleParam, $employmentStatusParam, $companyNameParam,
-                    $industryProfessionParam, $partnershipFocusParam, $contributionPhoneParam, $isApproved
+                    $industryProfessionParam, $partnershipFocusParam, $contributionPhoneParam,
+                    $isApproved, $missionaryType ?: null, $country ?: null
                 ]);
                 $userId = (int)$pdo->lastInsertId();
 
@@ -121,7 +120,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $stmt2 = $pdo->prepare('INSERT INTO students (user_id, campus_name) VALUES (?, ?)');
                     $stmt2->execute([$userId, $campusName]);
                 } elseif ($category === 'partner') {
-                    // For backward compatibility and relational integrity, insert also in marketplace_partners
                     $stmt2 = $pdo->prepare('INSERT INTO marketplace_partners (user_id, business_name, current_profession, graduation_year) VALUES (?, ?, ?, ?)');
                     $stmt2->execute([$userId, $companyNameParam, $industryProfessionParam, $gradYearParam]);
                 } elseif ($category === 'associate') {
@@ -138,12 +136,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $error = 'Registration failed: ' . $e->getMessage();
             }
             if ($error !== '') {
-                // fall through to show error
             } else {
-            header('Location: login.php');
+            $redirectParam = ($category === 'partner' || $category === 'missionary') ? '?registration=pending' : '';
+            header('Location: login.php' . $redirectParam);
             exit;
             }
         }
+    }
     }
 }
 ?>
@@ -181,25 +180,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                             <input type="email" name="email" class="form-control" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">WhatsApp Phone Number</label>
-                            <input type="number" name="whatsapp_phone" class="form-control" placeholder="0712345678" required>
-                            <div class="form-text">This number is for WhatsApp connectivity.</div>
-                        </div>
-                        <div class="mb-3">
                             <label class="form-label">Member Category</label>
                             <select name="category" id="category" class="form-select" required>
                                 <option value="" selected disabled>Select category</option>
                                 <option value="student">Student</option>
                                 <option value="associate">Associate</option>
                                 <option value="partner">Office Bearer</option>
+                                <option value="missionary">Missionary</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Date of Birth *</label>
+                            <label class="form-label">WhatsApp Phone Number</label>
+                            <input type="number" name="whatsapp_phone" id="whatsapp_phone" class="form-control" placeholder="0712345678" required>
+                            <div class="form-text">This number is for WhatsApp connectivity.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date of Birth <small class="text-muted">(recommended)</small></label>
                             <div class="row g-2">
                                 <div class="col-4">
-                                    <select name="birth_year" id="birth_year" class="form-select" required>
+                                    <select name="birth_year" id="birth_year" class="form-select">
                                         <option value="" selected>Year</option>
                                         <?php for ($y = (int)date('Y') - 13; $y >= 1920; $y--): ?>
                                             <option value="<?= $y ?>"><?= $y ?></option>
@@ -207,7 +207,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                     </select>
                                 </div>
                                 <div class="col-4">
-                                    <select name="birth_month" id="birth_month" class="form-select" required>
+                                    <select name="birth_month" id="birth_month" class="form-select">
                                         <option value="" selected>Month</option>
                                         <option value="1">January</option>
                                         <option value="2">February</option>
@@ -224,7 +224,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                     </select>
                                 </div>
                                 <div class="col-4">
-                                    <select name="birth_day" id="birth_day" class="form-select" required>
+                                    <select name="birth_day" id="birth_day" class="form-select">
                                         <option value="" selected>Day</option>
                                         <?php for ($d = 1; $d <= 31; $d++): ?>
                                             <option value="<?= $d ?>"><?= $d ?></option>
@@ -232,7 +232,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                     </select>
                                 </div>
                             </div>
-                            <div class="form-text">Required for birthday notifications and age verification</div>
+                            <div class="form-text">Optional but recommended for birthday notifications.</div>
                         </div>
                         <div class="mb-3 d-none" id="campusWrapper">
                             <label class="form-label">Campus</label>
@@ -254,13 +254,226 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                 <label class="form-label">Current Profession</label>
                                 <input type="text" name="current_profession" id="current_profession" class="form-control" maxlength="120">
                             </div>
-                            
+
+                            <div id="missionary-fields" style="display: none;">
+                                <div class="card p-3 mb-3 border-info" style="background-color: #f0f8ff;">
+                                    <h6 class="text-info fw-bold mb-3"><i class="fa fa-globe"></i> Missionary Details</h6>
+                                    <div class="mb-3">
+                                        <label class="form-label">Missionary Type</label>
+                                        <select name="missionary_type" id="missionary_type" class="form-select">
+                                            <option value="" selected disabled>Select missionary type</option>
+                                            <option value="short_term">Short Term Missionary</option>
+                                            <option value="long_term">Long Term Missionary</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Country of Origin</label>
+                                        <select name="country" id="country" class="form-select">
+                                            <option value="" selected disabled>Select your country</option>
+                                            <option value="Afghanistan">Afghanistan</option>
+                                            <option value="Albania">Albania</option>
+                                            <option value="Algeria">Algeria</option>
+                                            <option value="Andorra">Andorra</option>
+                                            <option value="Angola">Angola</option>
+                                            <option value="Antigua and Barbuda">Antigua and Barbuda</option>
+                                            <option value="Argentina">Argentina</option>
+                                            <option value="Armenia">Armenia</option>
+                                            <option value="Australia">Australia</option>
+                                            <option value="Austria">Austria</option>
+                                            <option value="Azerbaijan">Azerbaijan</option>
+                                            <option value="Bahamas">Bahamas</option>
+                                            <option value="Bahrain">Bahrain</option>
+                                            <option value="Bangladesh">Bangladesh</option>
+                                            <option value="Barbados">Barbados</option>
+                                            <option value="Belarus">Belarus</option>
+                                            <option value="Belgium">Belgium</option>
+                                            <option value="Belize">Belize</option>
+                                            <option value="Benin">Benin</option>
+                                            <option value="Bhutan">Bhutan</option>
+                                            <option value="Bolivia">Bolivia</option>
+                                            <option value="Bosnia and Herzegovina">Bosnia and Herzegovina</option>
+                                            <option value="Botswana">Botswana</option>
+                                            <option value="Brazil">Brazil</option>
+                                            <option value="Brunei">Brunei</option>
+                                            <option value="Bulgaria">Bulgaria</option>
+                                            <option value="Burkina Faso">Burkina Faso</option>
+                                            <option value="Burundi">Burundi</option>
+                                            <option value="Cabo Verde">Cabo Verde</option>
+                                            <option value="Cambodia">Cambodia</option>
+                                            <option value="Cameroon">Cameroon</option>
+                                            <option value="Canada">Canada</option>
+                                            <option value="Central African Republic">Central African Republic</option>
+                                            <option value="Chad">Chad</option>
+                                            <option value="Chile">Chile</option>
+                                            <option value="China">China</option>
+                                            <option value="Colombia">Colombia</option>
+                                            <option value="Comoros">Comoros</option>
+                                            <option value="Congo">Congo</option>
+                                            <option value="Costa Rica">Costa Rica</option>
+                                            <option value="Croatia">Croatia</option>
+                                            <option value="Cuba">Cuba</option>
+                                            <option value="Cyprus">Cyprus</option>
+                                            <option value="Czech Republic">Czech Republic</option>
+                                            <option value="Denmark">Denmark</option>
+                                            <option value="Djibouti">Djibouti</option>
+                                            <option value="Dominica">Dominica</option>
+                                            <option value="Dominican Republic">Dominican Republic</option>
+                                            <option value="Ecuador">Ecuador</option>
+                                            <option value="Egypt">Egypt</option>
+                                            <option value="El Salvador">El Salvador</option>
+                                            <option value="Equatorial Guinea">Equatorial Guinea</option>
+                                            <option value="Eritrea">Eritrea</option>
+                                            <option value="Estonia">Estonia</option>
+                                            <option value="Eswatini">Eswatini</option>
+                                            <option value="Ethiopia">Ethiopia</option>
+                                            <option value="Fiji">Fiji</option>
+                                            <option value="Finland">Finland</option>
+                                            <option value="France">France</option>
+                                            <option value="Gabon">Gabon</option>
+                                            <option value="Gambia">Gambia</option>
+                                            <option value="Georgia">Georgia</option>
+                                            <option value="Germany">Germany</option>
+                                            <option value="Ghana">Ghana</option>
+                                            <option value="Greece">Greece</option>
+                                            <option value="Grenada">Grenada</option>
+                                            <option value="Guatemala">Guatemala</option>
+                                            <option value="Guinea">Guinea</option>
+                                            <option value="Guinea-Bissau">Guinea-Bissau</option>
+                                            <option value="Guyana">Guyana</option>
+                                            <option value="Haiti">Haiti</option>
+                                            <option value="Honduras">Honduras</option>
+                                            <option value="Hungary">Hungary</option>
+                                            <option value="Iceland">Iceland</option>
+                                            <option value="India">India</option>
+                                            <option value="Indonesia">Indonesia</option>
+                                            <option value="Iran">Iran</option>
+                                            <option value="Iraq">Iraq</option>
+                                            <option value="Ireland">Ireland</option>
+                                            <option value="Israel">Israel</option>
+                                            <option value="Italy">Italy</option>
+                                            <option value="Jamaica">Jamaica</option>
+                                            <option value="Japan">Japan</option>
+                                            <option value="Jordan">Jordan</option>
+                                            <option value="Kazakhstan">Kazakhstan</option>
+                                            <option value="Kenya">Kenya</option>
+                                            <option value="Kiribati">Kiribati</option>
+                                            <option value="Kuwait">Kuwait</option>
+                                            <option value="Kyrgyzstan">Kyrgyzstan</option>
+                                            <option value="Laos">Laos</option>
+                                            <option value="Latvia">Latvia</option>
+                                            <option value="Lebanon">Lebanon</option>
+                                            <option value="Lesotho">Lesotho</option>
+                                            <option value="Liberia">Liberia</option>
+                                            <option value="Libya">Libya</option>
+                                            <option value="Liechtenstein">Liechtenstein</option>
+                                            <option value="Lithuania">Lithuania</option>
+                                            <option value="Luxembourg">Luxembourg</option>
+                                            <option value="Madagascar">Madagascar</option>
+                                            <option value="Malawi">Malawi</option>
+                                            <option value="Malaysia">Malaysia</option>
+                                            <option value="Maldives">Maldives</option>
+                                            <option value="Mali">Mali</option>
+                                            <option value="Malta">Malta</option>
+                                            <option value="Marshall Islands">Marshall Islands</option>
+                                            <option value="Mauritania">Mauritania</option>
+                                            <option value="Mauritius">Mauritius</option>
+                                            <option value="Mexico">Mexico</option>
+                                            <option value="Micronesia">Micronesia</option>
+                                            <option value="Moldova">Moldova</option>
+                                            <option value="Monaco">Monaco</option>
+                                            <option value="Mongolia">Mongolia</option>
+                                            <option value="Montenegro">Montenegro</option>
+                                            <option value="Morocco">Morocco</option>
+                                            <option value="Mozambique">Mozambique</option>
+                                            <option value="Myanmar">Myanmar</option>
+                                            <option value="Namibia">Namibia</option>
+                                            <option value="Nauru">Nauru</option>
+                                            <option value="Nepal">Nepal</option>
+                                            <option value="Netherlands">Netherlands</option>
+                                            <option value="New Zealand">New Zealand</option>
+                                            <option value="Nicaragua">Nicaragua</option>
+                                            <option value="Niger">Niger</option>
+                                            <option value="Nigeria">Nigeria</option>
+                                            <option value="North Korea">North Korea</option>
+                                            <option value="North Macedonia">North Macedonia</option>
+                                            <option value="Norway">Norway</option>
+                                            <option value="Oman">Oman</option>
+                                            <option value="Pakistan">Pakistan</option>
+                                            <option value="Palau">Palau</option>
+                                            <option value="Palestine">Palestine</option>
+                                            <option value="Panama">Panama</option>
+                                            <option value="Papua New Guinea">Papua New Guinea</option>
+                                            <option value="Paraguay">Paraguay</option>
+                                            <option value="Peru">Peru</option>
+                                            <option value="Philippines">Philippines</option>
+                                            <option value="Poland">Poland</option>
+                                            <option value="Portugal">Portugal</option>
+                                            <option value="Qatar">Qatar</option>
+                                            <option value="Romania">Romania</option>
+                                            <option value="Russia">Russia</option>
+                                            <option value="Rwanda">Rwanda</option>
+                                            <option value="Saint Kitts and Nevis">Saint Kitts and Nevis</option>
+                                            <option value="Saint Lucia">Saint Lucia</option>
+                                            <option value="Saint Vincent and the Grenadines">Saint Vincent and the Grenadines</option>
+                                            <option value="Samoa">Samoa</option>
+                                            <option value="San Marino">San Marino</option>
+                                            <option value="Sao Tome and Principe">Sao Tome and Principe</option>
+                                            <option value="Saudi Arabia">Saudi Arabia</option>
+                                            <option value="Senegal">Senegal</option>
+                                            <option value="Serbia">Serbia</option>
+                                            <option value="Seychelles">Seychelles</option>
+                                            <option value="Sierra Leone">Sierra Leone</option>
+                                            <option value="Singapore">Singapore</option>
+                                            <option value="Slovakia">Slovakia</option>
+                                            <option value="Slovenia">Slovenia</option>
+                                            <option value="Solomon Islands">Solomon Islands</option>
+                                            <option value="Somalia">Somalia</option>
+                                            <option value="South Africa">South Africa</option>
+                                            <option value="South Korea">South Korea</option>
+                                            <option value="South Sudan">South Sudan</option>
+                                            <option value="Spain">Spain</option>
+                                            <option value="Sri Lanka">Sri Lanka</option>
+                                            <option value="Sudan">Sudan</option>
+                                            <option value="Suriname">Suriname</option>
+                                            <option value="Sweden">Sweden</option>
+                                            <option value="Switzerland">Switzerland</option>
+                                            <option value="Syria">Syria</option>
+                                            <option value="Taiwan">Taiwan</option>
+                                            <option value="Tajikistan">Tajikistan</option>
+                                            <option value="Tanzania">Tanzania</option>
+                                            <option value="Thailand">Thailand</option>
+                                            <option value="Timor-Leste">Timor-Leste</option>
+                                            <option value="Togo">Togo</option>
+                                            <option value="Tonga">Tonga</option>
+                                            <option value="Trinidad and Tobago">Trinidad and Tobago</option>
+                                            <option value="Tunisia">Tunisia</option>
+                                            <option value="Turkey">Turkey</option>
+                                            <option value="Turkmenistan">Turkmenistan</option>
+                                            <option value="Tuvalu">Tuvalu</option>
+                                            <option value="Uganda">Uganda</option>
+                                            <option value="Ukraine">Ukraine</option>
+                                            <option value="United Arab Emirates">United Arab Emirates</option>
+                                            <option value="United Kingdom">United Kingdom</option>
+                                            <option value="United States">United States</option>
+                                            <option value="Uruguay">Uruguay</option>
+                                            <option value="Uzbekistan">Uzbekistan</option>
+                                            <option value="Vanuatu">Vanuatu</option>
+                                            <option value="Vatican City">Vatican City</option>
+                                            <option value="Venezuela">Venezuela</option>
+                                            <option value="Vietnam">Vietnam</option>
+                                            <option value="Yemen">Yemen</option>
+                                            <option value="Zambia">Zambia</option>
+                                            <option value="Zimbabwe">Zimbabwe</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Specialized Fields for Office Bearers (Partners) -->
                             <div id="partner-fields" style="display: none;">
                                 <div class="card p-3 mb-3 border-warning" style="background-color: #fffdf5;">
                                     <h6 class="text-warning fw-bold mb-3"><i class="fa fa-briefcase"></i> Office Bearer Details</h6>
-                                    
-                                    <!-- Academic & JDM History -->
+
                                     <div class="mb-3">
                                         <label class="form-label">Graduation Year (UON Alumni Verification)</label>
                                         <select name="partner_graduation_year" id="partner_graduation_year" class="form-select">
@@ -281,7 +494,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                         </select>
                                     </div>
 
-                                    <!-- Professional & Business Profile -->
                                     <div class="mb-3">
                                         <label class="form-label">Employment Status</label>
                                         <select name="partner_employment_status" id="partner_employment_status" class="form-select">
@@ -318,7 +530,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                         <input type="text" name="partner_industry_profession_other" id="partner_industry_profession_other" class="form-control" placeholder="Specify industry/profession">
                                     </div>
 
-                                    <!-- Ministry Partnership & Support -->
                                     <div class="mb-3">
                                         <label class="form-label">Partnership Focus Area</label>
                                         <select name="partner_partnership_focus" id="partner_partnership_focus" class="form-select">
@@ -331,7 +542,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                     </div>
                                 </div>
                             </div>
-                            
+
                         <div class="mb-3">
                             <label class="form-label">Password</label>
                             <input type="password" name="password" class="form-control" required>
@@ -363,14 +574,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         const category = document.getElementById('category');
         const campusWrapper = document.getElementById('campusWrapper');
         const campus = document.getElementById('campus_name');
-        
-        // Associate fields
+        const whatsappPhone = document.getElementById('whatsapp_phone');
+
         const gradYearFields = document.getElementById('gradYearFields');
         const gradYearInput = document.getElementById('graduation_year');
         const professionFields = document.getElementById('professionFields');
         const professionInput = document.getElementById('current_profession');
 
-        // Partner / Office Bearer fields
         const partnerFields = document.getElementById('partner-fields');
         const partnerGradYear = document.getElementById('partner_graduation_year');
         const partnerCampusRole = document.getElementById('partner_campus_role');
@@ -379,13 +589,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         const partnerIndustry = document.getElementById('partner_industry_profession');
         const partnerFocus = document.getElementById('partner_partnership_focus');
 
-        // Other option sub-fields
+        const missionaryFields = document.getElementById('missionary-fields');
+        const missionaryType = document.getElementById('missionary_type');
+        const country = document.getElementById('country');
+
         const empStatusOtherWrapper = document.getElementById('employmentStatusOtherWrapper');
         const empStatusOtherInput = document.getElementById('partner_employment_status_other');
         const industryOtherWrapper = document.getElementById('industryOtherWrapper');
         const industryOtherInput = document.getElementById('partner_industry_profession_other');
 
-        // Watch Employment Status dropdown
         if (partnerEmpStatus) {
             partnerEmpStatus.addEventListener('change', function() {
                 if (this.value === 'Other') {
@@ -399,7 +611,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             });
         }
 
-        // Watch Industry dropdown
         if (partnerIndustry) {
             partnerIndustry.addEventListener('change', function() {
                 if (this.value === 'Other') {
@@ -415,13 +626,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         function updateFields() {
             if (!category) return;
-            
+
             const selectedCategory = category.value;
             const isStudent = selectedCategory === 'student';
             const isAssociate = selectedCategory === 'associate';
             const isPartner = selectedCategory === 'partner';
+            const isMissionary = selectedCategory === 'missionary';
 
-            // Handle Campus field
             if (campusWrapper && campus) {
                 if (isStudent) {
                     campusWrapper.classList.remove('d-none');
@@ -433,7 +644,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
-            // Handle Graduation Year field for Associate
             if (gradYearFields && gradYearInput) {
                 if (isAssociate) {
                     gradYearFields.classList.remove('d-none');
@@ -445,7 +655,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
-            // Handle Profession field for Associate
             if (professionFields && professionInput) {
                 if (isAssociate) {
                     professionFields.classList.remove('d-none');
@@ -457,7 +666,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
             }
 
-            // Handle Partner/Office Bearer fields
+            if (missionaryFields) {
+                if (isMissionary) {
+                    missionaryFields.style.display = 'block';
+                    missionaryType?.setAttribute('required', 'required');
+                    country?.setAttribute('required', 'required');
+                    if (whatsappPhone) {
+                        whatsappPhone.placeholder = 'Optional';
+                        whatsappPhone.removeAttribute('required');
+                    }
+                } else {
+                    missionaryFields.style.display = 'none';
+                    missionaryType?.removeAttribute('required');
+                    country?.removeAttribute('required');
+                    if (missionaryType) missionaryType.value = '';
+                    if (country) country.value = '';
+                    if (whatsappPhone) {
+                        whatsappPhone.placeholder = '0712345678';
+                        whatsappPhone.setAttribute('required', 'required');
+                    }
+                }
+            }
+
             if (partnerFields) {
                 if (isPartner) {
                     partnerFields.style.display = 'block';
@@ -475,15 +705,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     partnerCompany?.removeAttribute('required');
                     partnerIndustry?.removeAttribute('required');
                     partnerFocus?.removeAttribute('required');
-                    
-                    // Reset Partner values
+
                     if (partnerGradYear) partnerGradYear.value = '';
                     if (partnerCampusRole) partnerCampusRole.value = '';
                     if (partnerEmpStatus) partnerEmpStatus.value = '';
                     if (partnerCompany) partnerCompany.value = '';
                     if (partnerIndustry) partnerIndustry.value = '';
                     if (partnerFocus) partnerFocus.value = '';
-                    
+
                     empStatusOtherWrapper.classList.add('d-none');
                     empStatusOtherInput.value = '';
                     industryOtherWrapper.classList.add('d-none');

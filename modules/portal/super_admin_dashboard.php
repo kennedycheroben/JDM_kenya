@@ -16,7 +16,10 @@ function canManageTarget(string $targetRole, int $targetId, int $selfId): bool {
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_csrf();
+    if (!require_csrf()) {
+        $err = $_SESSION['csrf_error'] ?? 'Session expired. Please reload the page and try again.';
+        unset($_SESSION['csrf_error']);
+    } else {
     $action = $_POST['action'] ?? '';
     $reason = trim($_POST['reason'] ?? '');
     $reasonRequiredActions = ['promote_admin', 'promote_gbs_leader', 'demote_member', 'remove_gbs_leader'];
@@ -79,6 +82,97 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         // Delete the pending registration
                         $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$targetId]);
                         $msg = 'Office bearer registration rejected and user deleted.';
+                    }
+                } elseif ($action === 'approve_missionary') {
+                    if ($target['category'] !== 'missionary') {
+                        $err = 'Only missionaries can be approved.';
+                    } else {
+                        $pdo->prepare("UPDATE users SET is_approved = 1 WHERE id = ?")->execute([$targetId]);
+                        $msg = 'Missionary approved successfully.';
+                        try {
+                            $notifText = "✅ Congratulations! Your registration as a Missionary has been approved by JDM leadership.\n\nYou can now access the full member dashboard and all portal features.\n\nWelcome to the JDM Kenya missionary family!";
+                            $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                            $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                        } catch (PDOException $e) {
+                            error_log("Failed to send Missionary approval notification: " . $e->getMessage());
+                        }
+                    }
+                } elseif ($action === 'reject_missionary') {
+                    if ($target['category'] !== 'missionary') {
+                        $err = 'Only missionaries can be rejected.';
+                    } else {
+                        try {
+                            $notifText = "ℹ️ Thank you for your interest in registering as a Missionary with JDM Kenya.\n\nUnfortunately, your application could not be approved at this time.\n\nPlease contact JDM leadership for more information.";
+                            $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                            $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                        } catch (PDOException $e) {
+                            error_log("Failed to send Missionary rejection notification: " . $e->getMessage());
+                        }
+                        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$targetId]);
+                        $msg = 'Missionary registration rejected and user deleted.';
+                    }
+                } elseif ($action === 'appoint_leader') {
+                    $leaderType = trim($_POST['leader_type'] ?? '');
+                    $campusName = trim($_POST['leader_campus'] ?? '');
+                    $allowedTypes = ['campus_leader', 'gbs_leader', 'worship_leader'];
+                    if (!in_array($leaderType, $allowedTypes, true)) {
+                        $err = 'Invalid leadership type.';
+                    } elseif ($leaderType === 'campus_leader' && $campusName === '') {
+                        $err = 'Please select a campus for the campus leader.';
+                    } else {
+                        $pdo->prepare("INSERT INTO leaders (user_id, leader_type, campus_name, created_by) VALUES (?, ?, ?, ?)")
+                            ->execute([$targetId, $leaderType, $campusName ?: null, $selfId]);
+                        $typeLabel = str_replace('_', ' ', $leaderType);
+                        $msg = "User appointed as {$typeLabel}.";
+                        try {
+                            $campusInfo = $campusName ? " for {$campusName}" : '';
+                            $notifText = "🎉 Congratulations! You have been appointed as a " . ucfirst($typeLabel) . "{$campusInfo}.\n\nReason from JDM leadership:\n{$reason}\n\nGod bless you in this new leadership role!";
+                            $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                            $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                        } catch (PDOException $e) {
+                            error_log("Failed to send leadership notification: " . $e->getMessage());
+                        }
+                    }
+                } elseif ($action === 'remove_leader') {
+                    $leaderType = trim($_POST['leader_type'] ?? '');
+                    $pdo->prepare("DELETE FROM leaders WHERE user_id = ? AND leader_type = ?")
+                        ->execute([$targetId, $leaderType]);
+                    $typeLabel = str_replace('_', ' ', $leaderType);
+                    $msg = "{$typeLabel} role removed from user.";
+                    try {
+                        $notifText = "ℹ️ Your appointment as a " . ucfirst($typeLabel) . " has been removed by JDM leadership.\n\nReason from JDM leadership:\n{$reason}";
+                        $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                        $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                    } catch (PDOException $e) {
+                        error_log("Failed to send leadership removal notification: " . $e->getMessage());
+                    }
+                } elseif ($action === 'appoint_staff') {
+                    $staffType = trim($_POST['staff_type'] ?? '');
+                    if (!in_array($staffType, ['part_time', 'full_time'], true)) {
+                        $err = 'Invalid staff type.';
+                    } else {
+                        $pdo->prepare("UPDATE users SET is_staff = 1, staff_type = ? WHERE id = ?")
+                            ->execute([$staffType, $targetId]);
+                        $label = $staffType === 'part_time' ? 'Part-Time Staff' : 'Full-Time Staff';
+                        $msg = "User appointed as {$label}.";
+                        try {
+                            $notifText = "🎉 Congratulations! You have been appointed as a {$label} at JDM Kenya.\n\nReason from JDM leadership:\n{$reason}\n\nThank you for your service!";
+                            $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                            $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                        } catch (PDOException $e) {
+                            error_log("Failed to send staff appointment notification: " . $e->getMessage());
+                        }
+                    }
+                } elseif ($action === 'remove_staff') {
+                    $pdo->prepare("UPDATE users SET is_staff = 0, staff_type = NULL WHERE id = ?")
+                        ->execute([$targetId]);
+                    $msg = 'Staff role removed from user.';
+                    try {
+                        $notifText = "ℹ️ Your staff appointment has been removed by JDM leadership.\n\nReason from JDM leadership:\n{$reason}";
+                        $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                        $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                    } catch (PDOException $e) {
+                        error_log("Failed to send staff removal notification: " . $e->getMessage());
                     }
                 } elseif ($action === 'promote_admin') {
                     $pdo->prepare("UPDATE users SET role = 'admin' WHERE id = ?")->execute([$targetId]);
@@ -145,25 +239,125 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $err = 'Unknown action.';
                 }
             } catch (Throwable $e) {
-                $err = 'Operation failed.';
+                // Log exception details for debugging
+                error_log("[super_admin_dashboard] Action error: " . $e->getMessage() . " -- " . $e->getFile() . ":" . $e->getLine());
+                error_log($e->getTraceAsString());
+                $err = 'Operation failed: ' . $e->getMessage();
             }
         }
     }
+    }
 }
 
-$users = $pdo->query('SELECT id, name, email, whatsapp_phone, role, category, is_gbs_leader, is_approved, created_at FROM users ORDER BY created_at DESC')->fetchAll(PDO::FETCH_ASSOC);
+$saPage = max(1, (int)($_GET['sa_page'] ?? 1));
+$saPerPage = 100;
+$saOffset = ($saPage - 1) * $saPerPage;
+
+$totalUsers = 0;
+$totalUserPages = 1;
+$users = [];
+
+try {
+    $totalUsers = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    $totalUserPages = max(1, (int)ceil($totalUsers / $saPerPage));
+
+    // Try the full column list first; if any column doesn't exist, fall back to basic columns
+    try {
+        $users = $pdo->query("SELECT id, name, email, whatsapp_phone, role, category, is_gbs_leader, is_approved, is_staff, staff_type, created_at FROM users ORDER BY created_at DESC LIMIT {$saPerPage} OFFSET {$saOffset}")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        // Fallback: some columns may not exist yet (run migration via /setup.php)
+        error_log('Super admin dashboard: full user query failed, falling back: ' . $e->getMessage());
+        $users = $pdo->query("SELECT id, name, email, whatsapp_phone, role, category, created_at FROM users ORDER BY created_at DESC LIMIT {$saPerPage} OFFSET {$saOffset}")->fetchAll(PDO::FETCH_ASSOC);
+        // Add default values for missing columns
+        foreach ($users as &$u) {
+            $u['is_gbs_leader'] = $u['is_gbs_leader'] ?? 0;
+            $u['is_approved'] = $u['is_approved'] ?? 1;
+            $u['is_staff'] = $u['is_staff'] ?? 0;
+            $u['staff_type'] = $u['staff_type'] ?? null;
+        }
+        unset($u);
+    }
+} catch (PDOException $e) {
+    error_log('Super admin dashboard: user count query failed: ' . $e->getMessage());
+}
 
 // =====================================================================
-// OFFICE BEARER APPROVAL WORKFLOW
+// OFFICE BEARER & MISSIONARY APPROVAL WORKFLOW
 // =====================================================================
 // Query for pending office bearer (partner) registrations that need approval
-$pendingPartners = $pdo->query('
-    SELECT id, name, email, whatsapp_phone, employment_status, company_name, 
-           industry_profession, partnership_focus, created_at 
-    FROM users 
-    WHERE category = "partner" AND is_approved = 0 
-    ORDER BY created_at ASC
-')->fetchAll(PDO::FETCH_ASSOC);
+$pendingPartners = [];
+try {
+    $pendingPartners = $pdo->query('
+        SELECT id, name, email, whatsapp_phone, employment_status, company_name, 
+               industry_profession, partnership_focus, created_at 
+        FROM users 
+        WHERE category = "partner" AND is_approved = 0 
+        ORDER BY created_at ASC
+    ')->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    // Columns like employment_status, company_name, etc. may not exist
+    error_log('Pending partners query failed (columns may be missing): ' . $e->getMessage());
+    try {
+        $pendingPartners = $pdo->query('
+            SELECT id, name, email, whatsapp_phone, created_at 
+            FROM users 
+            WHERE category = "partner" AND is_approved = 0 
+            ORDER BY created_at ASC
+        ')->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($pendingPartners as &$p) {
+            $p['employment_status'] = $p['employment_status'] ?? '-';
+            $p['company_name'] = $p['company_name'] ?? '-';
+            $p['industry_profession'] = $p['industry_profession'] ?? '-';
+            $p['partnership_focus'] = $p['partnership_focus'] ?? '-';
+        }
+        unset($p);
+    } catch (PDOException $e2) {
+        error_log('Pending partners fallback query also failed: ' . $e2->getMessage());
+    }
+}
+
+// Query for pending missionary registrations that need approval
+$pendingMissionaries = [];
+try {
+    $pendingMissionaries = $pdo->query('
+        SELECT id, name, email, whatsapp_phone, missionary_type, country, created_at 
+        FROM users 
+        WHERE category = "missionary" AND is_approved = 0 
+        ORDER BY created_at ASC
+    ')->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log('Pending missionaries query failed (columns may be missing): ' . $e->getMessage());
+    try {
+        $pendingMissionaries = $pdo->query('
+            SELECT id, name, email, whatsapp_phone, created_at 
+            FROM users 
+            WHERE category = "missionary" AND is_approved = 0 
+            ORDER BY created_at ASC
+        ')->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($pendingMissionaries as &$m) {
+            $m['missionary_type'] = $m['missionary_type'] ?? '-';
+            $m['country'] = $m['country'] ?? '-';
+        }
+        unset($m);
+    } catch (PDOException $e2) {
+        error_log('Pending missionaries fallback query also failed: ' . $e2->getMessage());
+    }
+}
+
+// Get all leaders for display
+$leaders = [];
+try {
+    $leaders = $pdo->query('
+        SELECT l.*, u.name as user_name, u.email as user_email 
+        FROM leaders l 
+        JOIN users u ON l.user_id = u.id 
+        ORDER BY l.created_at DESC
+    ')->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $leaders = [];
+}
+
+$allowedCampuses = ['Main Campus', 'Upper Kabete', 'Lower Kabete', 'Chiromo', 'Kikuyu', 'Parklands'];
 
 ob_start();
 ?>
@@ -267,6 +461,71 @@ ob_start();
     </div>
 <?php endif; ?>
 
+<!-- ===================================================================== -->
+<!-- PENDING MISSIONARY APPROVALS SECTION -->
+<!-- ===================================================================== -->
+<?php if (!empty($pendingMissionaries)): ?>
+    <div class="card mb-4 border-info">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-globe"></i> 
+                Pending Missionary Approvals (<?= count($pendingMissionaries) ?>)
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped table-hover align-middle w-100 mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>WhatsApp</th>
+                            <th>Missionary Type</th>
+                            <th>Country</th>
+                            <th>Applied</th>
+                            <th style="min-width: 200px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pendingMissionaries as $m): ?>
+                            <tr>
+                                <td>#<?= (int)$m['id'] ?></td>
+                                <td><strong><?= escape($m['name']) ?></strong></td>
+                                <td><?= escape($m['email']) ?></td>
+                                <td><?= escape($m['whatsapp_phone'] ?: '-') ?></td>
+                                <td><?= escape(str_replace('_', ' ', ucfirst($m['missionary_type'] ?? '-'))) ?></td>
+                                <td><?= escape($m['country'] ?? '-') ?></td>
+                                <td><?= date('M d, Y', strtotime($m['created_at'])) ?></td>
+                                <td>
+                                    <div class="d-flex gap-2 justify-content-center flex-nowrap">
+                                        <form method="post" class="d-inline">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="user_id" value="<?= (int)$m['id'] ?>">
+                                            <input type="hidden" name="action" value="approve_missionary">
+                                            <button class="btn btn-sm btn-success" title="Approve this missionary">
+                                                <i class="bi bi-check-circle"></i> Approve
+                                            </button>
+                                        </form>
+                                        <form method="post" class="d-inline" onsubmit="return confirm('Reject and delete this application?');">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="user_id" value="<?= (int)$m['id'] ?>">
+                                            <input type="hidden" name="action" value="reject_missionary">
+                                            <button class="btn btn-sm btn-danger" title="Reject this missionary registration">
+                                                <i class="bi bi-x-circle"></i> Reject
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- Custom CSS: crisp, visible grid lines and compact cell padding for the user data table -->
 <style>
     .table-bordered th,
@@ -306,6 +565,23 @@ ob_start();
                         $selfId = (int)($_SESSION['user_id'] ?? 0);
                         $targetId = (int)$u['id'];
                         $locked = ($targetId === $selfId) || ($role === 'super_admin');
+                        
+                        // Get this user's leaders
+                        $uLeaders = [];
+                        try {
+                            $stmtL = $pdo->prepare('SELECT leader_type, campus_name FROM leaders WHERE user_id = ?');
+                            $stmtL->execute([$targetId]);
+                            $uLeaders = $stmtL->fetchAll(PDO::FETCH_ASSOC);
+                        } catch (Throwable $e) {
+                            $uLeaders = [];
+                        }
+                        $leaderTypes = $uLeaders ? array_column($uLeaders, 'leader_type') : [];
+                        
+                        $isCampusLeader = in_array('campus_leader', $leaderTypes);
+                        $isWorshipLeader = in_array('worship_leader', $leaderTypes);
+                        $isGbsLeader = in_array('gbs_leader', $leaderTypes) || $u['is_gbs_leader'];
+                        $isStaff = $u['is_staff'] ?? 0;
+                        $staffType = $u['staff_type'] ?? '';
                         ?>
                         <tr>
                             <td>#<?= (int)$u['id'] ?></td>
@@ -314,32 +590,46 @@ ob_start();
                             <td><?= escape($u['whatsapp_phone']) ?></td>
                             <td>
                                 <?php
-                                $rb = match($role) {
-                                    'super_admin' => 'bg-dark',
-                                    'admin' => 'bg-danger',
-                                    default => 'bg-primary'
-                                };
+                                $rb = 'bg-primary';
+                                switch($role) {
+                                    case 'super_admin':
+                                        $rb = 'bg-dark';
+                                        break;
+                                    case 'admin':
+                                        $rb = 'bg-danger';
+                                        break;
+                                }
                                 ?>
                                 <span class="badge <?= $rb ?>"><?= escape($role) ?></span>
-                                <?php if ($u['is_gbs_leader']): ?>
-                                    <span class="badge bg-warning ms-1">GBS Leader</span>
-                                <?php endif; ?>
+                                <?php if ($isCampusLeader): ?><span class="badge bg-info ms-1">Campus Leader</span><?php endif; ?>
+                                <?php if ($isGbsLeader): ?><span class="badge bg-warning ms-1">GBS Leader</span><?php endif; ?>
+                                <?php if ($isWorshipLeader): ?><span class="badge bg-success ms-1">Worship Leader</span><?php endif; ?>
+                                <?php if ($isStaff): ?><span class="badge bg-secondary ms-1"><?= escape(str_replace('_', ' ', ucfirst($staffType))) ?> Staff</span><?php endif; ?>
                             </td>
                             <td>
                                 <?php
-                                $categoryDisplay = match($u['category'] ?? '') {
-                                    'partner' => 'Office Bearer',
-                                    'student' => 'Student',
-                                    'associate' => 'Associate',
-                                    default => '-'
-                                };
+                                switch($u['category'] ?? '') {
+                                    case 'partner':
+                                        echo '<span class="badge bg-warning text-dark"><i class="bi bi-briefcase-fill"></i> Office Bearer</span>';
+                                        break;
+                                    case 'student':
+                                        echo '<span class="badge bg-info"><i class="bi bi-book"></i> Student</span>';
+                                        break;
+                                    case 'associate':
+                                        echo '<span class="badge bg-success"><i class="bi bi-briefcase"></i> Associate</span>';
+                                        break;
+                                    case 'missionary':
+                                        echo '<span class="badge text-white" style="background: linear-gradient(135deg, #6366f1, #a855f7) !important; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 2px 4px rgba(168,85,247,0.25);"><i class="bi bi-globe2"></i> Missionary</span>';
+                                        break;
+                                    default:
+                                        echo '<span class="badge bg-secondary">Member</span>';
+                                        break;
+                                }
                                 ?>
-                                <?= escape($categoryDisplay) ?>
                             </td>
                             <td>
                                 <?php
-                                // Show approval status for office bearers
-                                if ($u['category'] === 'partner') {
+                                if ($u['category'] === 'partner' || $u['category'] === 'missionary') {
                                     if ($u['is_approved']) {
                                         echo '<span class="badge bg-success">Approved</span>';
                                     } else {
@@ -352,69 +642,155 @@ ob_start();
                             </td>
                             <td><?= date('M d, Y', strtotime($u['created_at'])) ?></td>
                             <td>
-                                <!-- Inline flex layout: keeps all action buttons in one compact horizontal row -->
-                                <div class="d-flex gap-1 justify-content-center flex-nowrap">
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        Actions
+                                    </button>
+                                    <ul class="dropdown-menu" style="min-width: 220px;">
+                                        <li><a class="dropdown-item" href="view_member.php?id=<?= $targetId ?>"><i class="bi bi-eye"></i> View Profile</a></li>
+                                        <li><hr class="dropdown-divider"></li>
 
-                                    <!-- Promote to Admin: solid danger button (btn-sm keeps row height minimal) -->
-                                    <form method="post" onsubmit="return attachActionReason(this, 'promoting this user to Admin');">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="user_id" value="<?= $targetId ?>">
-                                        <input type="hidden" name="action" value="promote_admin">
-                                        <input type="hidden" name="reason" value="">
-                                        <button class="btn btn-sm btn-danger" <?= ($locked || $role === 'admin') ? 'disabled' : '' ?>>
-                                            Promote to Admin
-                                        </button>
-                                    </form>
+                                        <?php if ($role !== 'super_admin' && $targetId !== $selfId): ?>
+                                        <li><h6 class="dropdown-header">Leadership</h6></li>
+                                        
+                                        <!-- Campus Leader -->
+                                        <?php if (!$isCampusLeader): ?>
+                                        <li>
+                                            <form method="post">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="appoint_leader">
+                                                <input type="hidden" name="leader_type" value="campus_leader">
+                                                <input type="hidden" name="leader_campus" value="">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item" type="button" onclick="promptCampusLeader(this)"><i class="bi bi-building"></i> Appoint Campus Leader</button>
+                                            </form>
+                                        </li>
+                                        <?php else: ?>
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'removing this Campus Leader');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="remove_leader">
+                                                <input type="hidden" name="leader_type" value="campus_leader">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item text-danger" onclick="return attachActionReason(this.form, 'removing this Campus Leader')"><i class="bi bi-building-slash"></i> Remove Campus Leader</button>
+                                            </form>
+                                        </li>
+                                        <?php endif; ?>
 
-                                    <!-- Appoint as GBS Leader: solid warning with dark text for legibility -->
-                                    <form method="post" onsubmit="return attachActionReason(this, 'appointing this user as a GBS Leader');">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="user_id" value="<?= $targetId ?>">
-                                        <input type="hidden" name="action" value="promote_gbs_leader">
-                                        <input type="hidden" name="reason" value="">
-                                        <button class="btn btn-sm btn-warning text-dark" <?= ($locked || $u['is_gbs_leader']) ? 'disabled' : '' ?>>
-                                            <i class="bi bi-star"></i> Appoint as GBS Leader
-                                        </button>
-                                    </form>
+                                        <!-- GBS Leader -->
+                                        <?php if (!$isGbsLeader): ?>
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'appointing this user as GBS Leader');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="appoint_leader">
+                                                <input type="hidden" name="leader_type" value="gbs_leader">
+                                                <input type="hidden" name="leader_campus" value="">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item"><i class="bi bi-people"></i> Appoint GBS Leader</button>
+                                            </form>
+                                        </li>
+                                        <?php else: ?>
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'removing this GBS Leader');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="remove_leader">
+                                                <input type="hidden" name="leader_type" value="gbs_leader">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item text-danger"><i class="bi bi-people-slash"></i> Remove GBS Leader</button>
+                                            </form>
+                                        </li>
+                                        <?php endif; ?>
 
-                                    <?php if ($u['is_gbs_leader']): ?>
-                                        <!-- Remove GBS Leader: outline-secondary for a low-emphasis secondary action -->
-                                        <form method="post" onsubmit="return attachActionReason(this, 'removing this GBS Leader appointment');">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="user_id" value="<?= $targetId ?>">
-                                            <input type="hidden" name="action" value="remove_gbs_leader">
-                                            <input type="hidden" name="reason" value="">
-                                            <button class="btn btn-sm btn-outline-secondary" <?= $locked ? 'disabled' : '' ?>>
-                                                <i class="bi bi-star"></i> Remove GBS Leader
-                                            </button>
-                                        </form>
-                                    <?php endif; ?>
+                                        <!-- Worship Leader -->
+                                        <?php if (!$isWorshipLeader): ?>
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'appointing this user as Worship Leader');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="appoint_leader">
+                                                <input type="hidden" name="leader_type" value="worship_leader">
+                                                <input type="hidden" name="leader_campus" value="">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item"><i class="bi bi-music-note"></i> Appoint Worship Leader</button>
+                                            </form>
+                                        </li>
+                                        <?php else: ?>
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'removing this Worship Leader');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="remove_leader">
+                                                <input type="hidden" name="leader_type" value="worship_leader">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item text-danger"><i class="bi bi-music-note-slash"></i> Remove Worship Leader</button>
+                                            </form>
+                                        </li>
+                                        <?php endif; ?>
 
-                                    <!-- Demote to Member: outline-secondary communicates a reversible, non-destructive action -->
-                                    <form method="post" onsubmit="return attachActionReason(this, 'demoting this user to Member');">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="user_id" value="<?= $targetId ?>">
-                                        <input type="hidden" name="action" value="demote_member">
-                                        <input type="hidden" name="reason" value="">
-                                        <button class="btn btn-sm btn-outline-secondary" <?= ($locked || $role === 'member') ? 'disabled' : '' ?>>
-                                            Demote to Member
-                                        </button>
-                                    </form>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><h6 class="dropdown-header">Staff</h6></li>
+                                        
+                                        <?php if (!$isStaff): ?>
+                                        <li>
+                                            <form method="post">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="appoint_staff">
+                                                <input type="hidden" name="staff_type" value="">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item" type="button" onclick="promptStaffType(this)"><i class="bi bi-person-badge"></i> Appoint as Staff</button>
+                                            </form>
+                                        </li>
+                                        <?php else: ?>
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'removing this Staff appointment');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="remove_staff">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item text-danger"><i class="bi bi-person-badge-slash"></i> Remove Staff</button>
+                                            </form>
+                                        </li>
+                                        <?php endif; ?>
 
-                                    <!-- Delete: btn-link text-danger p-1 — minimal footprint, clearly destructive colour -->
-                                    <form method="post" onsubmit="return confirm('Delete this user? This cannot be undone.');">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="user_id" value="<?= $targetId ?>">
-                                        <input type="hidden" name="action" value="delete_user">
-                                        <button class="btn btn-sm btn-link text-danger p-1" <?= ($locked || $role === 'admin') ? 'disabled' : '' ?>>
-                                            <i class="bi bi-trash"></i> Delete
-                                        </button>
-                                    </form>
-
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><h6 class="dropdown-header">Admin Actions</h6></li>
+                                        
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'promoting this user to Admin');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="promote_admin">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item" <?= ($locked || $role === 'admin') ? 'disabled' : '' ?>><i class="bi bi-shield"></i> Promote to Admin</button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <form method="post" onsubmit="return attachActionReason(this, 'demoting this user to Member');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="demote_member">
+                                                <input type="hidden" name="reason" value="">
+                                                <button class="dropdown-item" <?= ($locked || $role === 'member') ? 'disabled' : '' ?>><i class="bi bi-arrow-down"></i> Demote to Member</button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <form method="post" onsubmit="return confirm('Delete this user? This cannot be undone.');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $targetId ?>">
+                                                <input type="hidden" name="action" value="delete_user">
+                                                <button class="dropdown-item text-danger" <?= ($locked || $role === 'admin') ? 'disabled' : '' ?>><i class="bi bi-trash"></i> Delete User</button>
+                                            </form>
+                                        </li>
+                                        <?php endif; ?>
+                                    </ul>
                                 </div>
                                 <?php if ($role === 'admin'): ?>
-                                    <!-- Informational note beneath the actions for admin-role rows -->
-                                    <div class="text-muted small mt-1">Admins can only be deleted/demoted via JDM leadership rules (supported).</div>
+                                    <div class="text-muted small mt-1">Admins protected from delete/demote.</div>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -425,22 +801,207 @@ ob_start();
     </div>
 </div>
 
-<script>
-function attachActionReason(form, actionLabel) {
-    const reason = window.prompt(`Please provide the reason for ${actionLabel}:`);
-    if (reason === null) {
-        return false;
-    }
+<?php if ($totalUserPages > 1): ?>
+<nav>
+    <ul class="pagination justify-content-center mt-3">
+        <?php if ($saPage > 1): ?>
+            <li class="page-item"><a class="page-link" href="?sa_page=<?= $saPage - 1 ?>">Previous</a></li>
+        <?php endif; ?>
+        <?php for ($i = 1; $i <= $totalUserPages; $i++): ?>
+            <li class="page-item <?= $i === $saPage ? 'active' : '' ?>">
+                <a class="page-link" href="?sa_page=<?= $i ?>"><?= $i ?></a>
+            </li>
+        <?php endfor; ?>
+        <?php if ($saPage < $totalUserPages): ?>
+            <li class="page-item"><a class="page-link" href="?sa_page=<?= $saPage + 1 ?>">Next</a></li>
+        <?php endif; ?>
+    </ul>
+</nav>
+<?php endif; ?>
 
+<!-- Campus Leader Modal -->
+<div class="modal fade" id="campusLeaderModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-building"></i> Appoint Campus Leader</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Campus</label>
+                    <select id="modalCampus" class="form-select">
+                        <option value="">Select campus...</option>
+                        <?php foreach ($allowedCampuses as $c): ?>
+                        <option value="<?= escape($c) ?>"><?= escape($c) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Reason <span class="text-danger">*</span></label>
+                    <textarea id="modalCampusReason" class="form-control" rows="3" placeholder="Enter the reason for this appointment..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmCampusLeader">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Staff Type Modal -->
+<div class="modal fade" id="staffTypeModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-person-badge"></i> Appoint as Staff</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Staff Type</label>
+                    <select id="modalStaffType" class="form-select">
+                        <option value="">Select staff type...</option>
+                        <option value="part_time">Part-Time</option>
+                        <option value="full_time">Full-Time</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Reason <span class="text-danger">*</span></label>
+                    <textarea id="modalStaffReason" class="form-control" rows="3" placeholder="Enter the reason for this appointment..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmStaffType">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let modalBtn = null;
+
+function attachActionReason(form, actionLabel) {
+    if (!form) return false;
+    const reason = window.prompt(`Please provide the reason for ${actionLabel}:`);
+    if (reason === null) return false;
     const trimmed = reason.trim();
     if (!trimmed) {
         alert('A reason is required before completing this action.');
         return false;
     }
-
-    form.querySelector('input[name="reason"]').value = trimmed;
+    const reasonInput = form.querySelector('input[name="reason"]');
+    if (reasonInput) reasonInput.value = trimmed;
     return true;
 }
+
+function promptCampusLeader(btn) {
+    modalBtn = btn;
+    document.getElementById('modalCampus').value = '';
+    document.getElementById('modalCampusReason').value = '';
+    // keep a reference to the modal instance so we can reliably hide it
+    window._campusLeaderModalInstance = new bootstrap.Modal(document.getElementById('campusLeaderModal'));
+    window._campusLeaderModalInstance.show();
+    return false;
+}
+
+function promptStaffType(btn) {
+    modalBtn = btn;
+    document.getElementById('modalStaffType').value = '';
+    document.getElementById('modalStaffReason').value = '';
+    // keep a reference to the modal instance so we can reliably hide it
+    window._staffTypeModalInstance = new bootstrap.Modal(document.getElementById('staffTypeModal'));
+    window._staffTypeModalInstance.show();
+    return false;
+}
+
+document.getElementById('confirmCampusLeader').addEventListener('click', function () {
+    const campus = document.getElementById('modalCampus').value;
+    const reason = document.getElementById('modalCampusReason').value.trim();
+    if (!campus) {
+        alert('Please select a campus.');
+        return;
+    }
+    if (!reason) {
+        alert('A reason is required.');
+        return;
+    }
+    try {
+        if (!modalBtn) throw new Error('No modal trigger button found');
+        const form = modalBtn.closest('form');
+        if (!form) throw new Error('Form not found');
+        const lc = form.querySelector('input[name="leader_campus"]');
+        const rr = form.querySelector('input[name="reason"]');
+        if (!lc || !rr) throw new Error('Hidden inputs missing');
+        lc.value = campus;
+        rr.value = reason;
+        if (window._campusLeaderModalInstance) {
+            window._campusLeaderModalInstance.hide();
+        } else {
+            const inst = bootstrap.Modal.getInstance(document.getElementById('campusLeaderModal'));
+            if (inst) inst.hide();
+        }
+        // ensure any stray backdrop is removed and body/html styles/classes cleaned
+        setTimeout(function(){
+            document.querySelectorAll('.modal-backdrop').forEach(function(el){ el.remove(); });
+            document.body.classList.remove('modal-open');
+            document.documentElement.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
+            document.body.style.paddingRight = '';
+            document.documentElement.style.paddingRight = '';
+        }, 80);
+        form.submit();
+    } catch (e) {
+        console.error('Confirm campus leader error:', e);
+        alert('Unable to complete action. Please try again.');
+    }
+});
+
+document.getElementById('confirmStaffType').addEventListener('click', function () {
+    const type = document.getElementById('modalStaffType').value;
+    const reason = document.getElementById('modalStaffReason').value.trim();
+    if (!type) {
+        alert('Please select a staff type.');
+        return;
+    }
+    if (!reason) {
+        alert('A reason is required.');
+        return;
+    }
+    try {
+        if (!modalBtn) throw new Error('No modal trigger button found');
+        const form = modalBtn.closest('form');
+        if (!form) throw new Error('Form not found');
+        const st = form.querySelector('input[name="staff_type"]');
+        const rr = form.querySelector('input[name="reason"]');
+        if (!st || !rr) throw new Error('Hidden inputs missing');
+        st.value = type;
+        rr.value = reason;
+        if (window._staffTypeModalInstance) {
+            window._staffTypeModalInstance.hide();
+        } else {
+            const inst = bootstrap.Modal.getInstance(document.getElementById('staffTypeModal'));
+            if (inst) inst.hide();
+        }
+        // ensure any stray backdrop is removed and body/html styles/classes cleaned
+        setTimeout(function(){
+            document.querySelectorAll('.modal-backdrop').forEach(function(el){ el.remove(); });
+            document.body.classList.remove('modal-open');
+            document.documentElement.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
+            document.body.style.paddingRight = '';
+            document.documentElement.style.paddingRight = '';
+        }, 80);
+        form.submit();
+    } catch (e) {
+        console.error('Confirm staff type error:', e);
+        alert('Unable to complete action. Please try again.');
+    }
+});
 </script>
 
 <?php

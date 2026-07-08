@@ -2,8 +2,6 @@ const body = document.body;
 const darkToggle = document.getElementById('darkToggle');
 const savedTheme = localStorage.getItem('jdm-theme');
 const header = document.querySelector('#header');
-const navmenu = document.querySelector('#navmenu');
-const mobileNavToggleBtn = document.querySelector('.mobile-nav-toggle');
 const scrollTop = document.querySelector('.scroll-top');
 const preloader = document.querySelector('#preloader');
 
@@ -12,31 +10,51 @@ function toggleScrolled() {
   window.scrollY > 100 ? body.classList.add('scrolled') : body.classList.remove('scrolled');
 }
 
-if (mobileNavToggleBtn && navmenu) {
-  mobileNavToggleBtn.addEventListener('click', () => {
-    navmenu.classList.toggle('mobile-nav-active');
-    mobileNavToggleBtn.classList.toggle('bi-list');
-    mobileNavToggleBtn.classList.toggle('bi-x');
-  });
-}
-
-document.querySelectorAll('#navmenu a').forEach(navLink => {
-  navLink.addEventListener('click', () => {
-    if (navmenu && navmenu.classList.contains('mobile-nav-active')) {
-      navmenu.classList.remove('mobile-nav-active');
-      if (mobileNavToggleBtn) {
-        mobileNavToggleBtn.classList.add('bi-list');
-        mobileNavToggleBtn.classList.remove('bi-x');
-      }
-    }
-  });
-});
-
 if (preloader) {
   window.addEventListener('load', () => {
     preloader.remove();
   });
 }
+
+window.addEventListener('load', () => {
+  const menuButton = document.querySelector('.hamburger');
+  const mobileMenu = document.querySelector('.mobile-nav');
+
+  if (!menuButton || !mobileMenu) return;
+
+  function toggleHamburgerMenu(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    menuButton.classList.toggle('is-active');
+    mobileMenu.classList.toggle('is-active');
+    body.classList.toggle('mobile-menu-open');
+  }
+
+  if (window.PointerEvent) {
+    menuButton.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'mouse') {
+        e.preventDefault();
+        toggleHamburgerMenu(e);
+      }
+    });
+  } else {
+    menuButton.addEventListener('click', toggleHamburgerMenu);
+    menuButton.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      toggleHamburgerMenu(e);
+    });
+  }
+
+  mobileMenu.querySelectorAll('a').forEach((link) => {
+    link.addEventListener('click', () => {
+      menuButton.classList.remove('is-active');
+      mobileMenu.classList.remove('is-active');
+      body.classList.remove('mobile-menu-open');
+    });
+  });
+});
 
 function toggleScrollTop() {
   if (!scrollTop) return;

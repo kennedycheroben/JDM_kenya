@@ -52,37 +52,69 @@ if ($selected_category === 'partner' && !$is_super_admin) {
     exit;
 }
 
+if ($selected_category === 'missionary' && !$is_super_admin) {
+    header('Location: view_members.php');
+    exit;
+}
+
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 50;
+$offset = ($page - 1) * $perPage;
+
+$countQuery = 'SELECT COUNT(*) FROM users WHERE 1=1';
 $query = 'SELECT id, name, email, whatsapp_phone, category, role, created_at FROM users WHERE 1=1';
 $params = [];
 
-if (!$is_super_admin) {
-    $query .= " AND role = 'member' AND category != 'partner'";
+if (!$isAdmin) {
+    $countQuery .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
+    $query .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
+} else {
+    if (!$is_super_admin) {
+        $countQuery .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
+        $query .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
+    }
 }
 
 if ($selected_category !== 'all') {
+    $countQuery .= ' AND category = ?';
     $query .= ' AND category = ?';
     $params[] = $selected_category;
 }
 
-$query .= ' ORDER BY created_at DESC';
+$query .= ' ORDER BY created_at DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
+
+$stmtCount = $pdo->prepare($countQuery);
+$stmtCount->execute($params);
+$totalMembers = (int)$stmtCount->fetchColumn();
+$totalPages = max(1, (int)ceil($totalMembers / $perPage));
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get category statistics (members only, adjusted by role permissions)
-$stats = ['students' => 0, 'associates' => 0, 'partners' => 0, 'total' => 0];
+$stats = ['students' => 0, 'associates' => 0, 'partners' => 0, 'missionaries' => 0, 'total' => 0];
 try {
-    if ($is_super_admin) {
-        $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
-        $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
-        $stats['partners'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='partner'")->fetch(PDO::FETCH_ASSOC)['c'];
-        $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member'")->fetch(PDO::FETCH_ASSOC)['c'];
+    if ($isAdmin) {
+        if ($is_super_admin) {
+            $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
+            $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
+            $stats['partners'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='partner'")->fetch(PDO::FETCH_ASSOC)['c'];
+            $stats['missionaries'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='missionary'")->fetch(PDO::FETCH_ASSOC)['c'];
+            $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member'")->fetch(PDO::FETCH_ASSOC)['c'];
+        } else {
+            $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
+            $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
+            $stats['partners'] = 0;
+            $stats['missionaries'] = 0;
+            $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category NOT IN ('partner', 'missionary')")->fetch(PDO::FETCH_ASSOC)['c'];
+        }
     } else {
         $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
         $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
         $stats['partners'] = 0;
-        $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category!='partner'")->fetch(PDO::FETCH_ASSOC)['c'];
+        $stats['missionaries'] = 0;
+        $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category NOT IN ('partner','missionary')")->fetch(PDO::FETCH_ASSOC)['c'];
     }
 } catch (Throwable $e) {
     error_log("Stats query error: " . $e->getMessage());
@@ -136,6 +168,16 @@ ob_start();
         </div>
     </div>
     <?php endif; ?>
+    <?php if ($is_super_admin): ?>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card">
+            <i class="bi bi-globe text-info"></i>
+            <h5>Missionaries</h5>
+            <h3 class="text-info"><?= $stats['missionaries'] ?></h3>
+            <p>Missionary members</p>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <!-- Category Filter -->
@@ -155,6 +197,11 @@ ob_start();
             <?php if ($is_super_admin): ?>
             <a href="view_members.php?category=partner" class="category-btn <?= $selected_category === 'partner' ? 'active' : '' ?>">
                 <i class="bi bi-briefcase-fill"></i> Office Bearers
+            </a>
+            <?php endif; ?>
+            <?php if ($is_super_admin): ?>
+            <a href="view_members.php?category=missionary" class="category-btn <?= $selected_category === 'missionary' ? 'active' : '' ?>">
+                <i class="bi bi-globe"></i> Missionaries
             </a>
             <?php endif; ?>
             <a href="view_members.php?category=other" class="category-btn <?= $selected_category === 'other' ? 'active' : '' ?>">
@@ -215,34 +262,49 @@ ob_start();
                                     <tr>
                                         <td><strong>#<?= $member['id'] ?></strong></td>
                                         <td><?= escape($member['name']) ?></td>
-                                        <td><?= escape($member['email']) ?></td>
-                                        <?php 
-                                        $can_view_phone = $isAdmin || (!empty($_SESSION['is_gbs_leader']));
-                                        ?>
-                                        <td><?= $can_view_phone ? escape($member['whatsapp_phone']) : escape(maskPhone($member['whatsapp_phone'] ?? '')) ?></td>
+                                        <td><?= $isAdmin ? escape($member['email']) : escape(maskEmail($member['email'] ?? '')) ?></td>
+                                        <td><?= $isAdmin ? escape($member['whatsapp_phone']) : escape(maskPhone($member['whatsapp_phone'] ?? '')) ?></td>
                                         <td>
-                                            <?php 
-                                            $badgeDisplay = match($member['category']) {
-                                                'student' => ['class' => 'bg-info', 'icon' => '<i class="bi bi-book"></i> Student'],
-                                                'associate' => ['class' => 'bg-success', 'icon' => '<i class="bi bi-briefcase"></i> Associate'],
-                                                'partner' => ['class' => 'bg-warning text-dark', 'icon' => '<i class="bi bi-briefcase-fill"></i> Office Bearer'],
-                                                'other' => ['class' => 'bg-secondary', 'icon' => 'Member'],
-                                                default => ['class' => 'bg-secondary', 'icon' => 'Member']
-                                            };
-                                            ?>
-                                            <span class="badge <?= $badgeDisplay['class'] ?>">
-                                                <?= $badgeDisplay['icon'] ?>
-                                            </span>
+                                            <?php if ($member['category'] === 'missionary'): ?>
+                                                <span class="badge text-white" style="background: linear-gradient(135deg, #6366f1, #a855f7) !important; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 2px 4px rgba(168,85,247,0.25);">
+                                                    <i class="bi bi-globe2"></i> Missionary
+                                                </span>
+                                            <?php else: ?>
+                                                <?php 
+                                                $badgeDisplay = ['class' => 'bg-secondary', 'icon' => 'Member'];
+                                                switch($member['category']) {
+                                                    case 'student':
+                                                        $badgeDisplay = ['class' => 'bg-info', 'icon' => '<i class="bi bi-book"></i> Student'];
+                                                        break;
+                                                    case 'associate':
+                                                        $badgeDisplay = ['class' => 'bg-success', 'icon' => '<i class="bi bi-briefcase"></i> Associate'];
+                                                        break;
+                                                    case 'partner':
+                                                        $badgeDisplay = ['class' => 'bg-warning text-dark', 'icon' => '<i class="bi bi-briefcase-fill"></i> Office Bearer'];
+                                                        break;
+                                                    case 'other':
+                                                        $badgeDisplay = ['class' => 'bg-secondary', 'icon' => 'Member'];
+                                                        break;
+                                                }
+                                                ?>
+                                                <span class="badge <?= $badgeDisplay['class'] ?>">
+                                                    <?= $badgeDisplay['icon'] ?>
+                                                </span>
+                                            <?php endif; ?>
                                         </td>
                                         <td><?= date('M d, Y', strtotime($member['created_at'])) ?></td>
                                         <td>
                                             <?php
                                             $r = $member['role'] ?? 'member';
-                                            $rb = match($r) {
-                                                'super_admin' => 'bg-dark',
-                                                'admin' => 'bg-danger',
-                                                default => 'bg-primary'
-                                            };
+                                            $rb = 'bg-primary';
+                                            switch($r) {
+                                                case 'super_admin':
+                                                    $rb = 'bg-dark';
+                                                    break;
+                                                case 'admin':
+                                                    $rb = 'bg-danger';
+                                                    break;
+                                            }
                                             ?>
                                             <span class="badge <?= $rb ?>"><?= escape($r) ?></span>
                                         </td>
@@ -261,6 +323,23 @@ ob_start();
                             </tbody>
                         </table>
                     </div>
+                    <?php if ($totalPages > 1): ?>
+                    <nav class="mt-3">
+                        <ul class="pagination justify-content-center">
+                            <?php if ($page > 1): ?>
+                                <li class="page-item"><a class="page-link" href="?category=<?= urlencode($selected_category) ?>&page=<?= $page - 1 ?>">Previous</a></li>
+                            <?php endif; ?>
+                            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                                <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                                    <a class="page-link" href="?category=<?= urlencode($selected_category) ?>&page=<?= $i ?>"><?= $i ?></a>
+                                </li>
+                            <?php endfor; ?>
+                            <?php if ($page < $totalPages): ?>
+                                <li class="page-item"><a class="page-link" href="?category=<?= urlencode($selected_category) ?>&page=<?= $page + 1 ?>">Next</a></li>
+                            <?php endif; ?>
+                        </ul>
+                    </nav>
+                    <?php endif; ?>
                 <?php else: ?>
                     <div class="alert alert-info text-center">
                         <i class="bi bi-info-circle"></i> No members found in this category.
