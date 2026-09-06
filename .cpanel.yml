@@ -2,5 +2,5 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/xqtrqexj/public_html
-    - /bin/cp -rf /home/xqtrqexj/repositories/JDM_kenya/* $DEPLOYPATH/
-    - /bin/cp -f /home/xqtrqexj/repositories/JDM_kenya/.htaccess $DEPLOYPATH/ 2>/dev/null || true
+    - /bin/cp -R * $DEPLOYPATH
+    - /bin/cp .htaccess $DEPLOYPATH 2>/dev/null || true
