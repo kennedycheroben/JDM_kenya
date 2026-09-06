@@ -28,60 +28,66 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if ($email === '' || $password === '') {
         $error = 'Please enter both email and password.';
     } else {
-        $stmt = $pdo->prepare('SELECT id,name,email,password,role,category,is_approved,is_gbs_leader,account_status FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
-        $stmt->execute([$email]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            $stmt = $pdo->prepare('SELECT id,name,email,password,role,category,is_approved,is_gbs_leader,account_status FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
+            $stmt->execute([$email]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($user && password_verify($password, $user['password'])) {
-            if ($user['account_status'] !== 'active') {
-                $error = 'This account is not available. Please contact JDM Kenya support.';
-            } else {
-            // =====================================================================
-            // APPROVAL CHECK
-            // =====================================================================
-            // Partners (Office Bearers) and Missionaries must be approved by Super Admin before
-            // they can access the full dashboard. Redirect to pending page if not approved.
-            if (in_array($user['category'], ['partner', 'missionary']) && empty($user['is_approved'])) {
-                $label = $user['category'] === 'partner' ? 'Office Bearer' : 'Missionary';
-                $error = "Your {$label} registration is pending JDM leadership approval. You will receive a notification once approved.";
-            } else {
+            if ($user && password_verify($password, $user['password'])) {
+                if ($user['account_status'] !== 'active') {
+                    $error = 'This account is not available. Please contact JDM Kenya support.';
+                } else {
                 // =====================================================================
-                // LOGIN SUCCESSFUL: Set session variables
+                // APPROVAL CHECK
                 // =====================================================================
-                // Prevent session fixation attacks by regenerating the session ID
-                session_regenerate_id(true);
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['user_name'] = $user['name'];
-                $_SESSION['user_role'] = $user['role'];
-                $_SESSION['is_gbs_leader'] = $user['is_gbs_leader'] ?? 0;
+                // Partners (Office Bearers) and Missionaries must be approved by Super Admin before
+                // they can access the full dashboard. Redirect to pending page if not approved.
+                if (in_array($user['category'], ['partner', 'missionary']) && empty($user['is_approved'])) {
+                    $label = $user['category'] === 'partner' ? 'Office Bearer' : 'Missionary';
+                    $error = "Your {$label} registration is pending JDM leadership approval. You will receive a notification once approved.";
+                } else {
+                    // =====================================================================
+                    // LOGIN SUCCESSFUL: Set session variables
+                    // =====================================================================
+                    // Prevent session fixation attacks by regenerating the session ID
+                    session_regenerate_id(true);
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['user_name'] = $user['name'];
+                    $_SESSION['user_role'] = $user['role'];
+                    $_SESSION['is_gbs_leader'] = $user['is_gbs_leader'] ?? 0;
 
-                $pendingAuthorizationUrl = \Jdm\OAuth\Support\PendingAuthorization::consumeUrl(BASE_PATH);
-                if ($pendingAuthorizationUrl !== null) {
-                    header('Location: ' . $pendingAuthorizationUrl);
+                    $pendingAuthorizationUrl = \Jdm\OAuth\Support\PendingAuthorization::consumeUrl(BASE_PATH);
+                    if ($pendingAuthorizationUrl !== null) {
+                        header('Location: ' . $pendingAuthorizationUrl);
+                        exit;
+                    }
+
+                    if ($user['category'] === 'sports_ministry') {
+                        header('Location: sports_application_status.php');
+                        exit;
+                    }
+
+                    // Route to appropriate dashboard based on role
+                    if ($user['role'] === 'super_admin') {
+                        header('Location: super_admin_dashboard.php');
+                        exit;
+                    }
+                    if ($user['role'] === 'admin') {
+                        header('Location: admin_dashboard.php');
+                        exit;
+                    }
+
+                    header('Location: member_dashboard.php');
                     exit;
                 }
-
-                if ($user['category'] === 'sports_ministry') {
-                    header('Location: sports_application_status.php');
-                    exit;
                 }
-
-                // Route to appropriate dashboard based on role
-                if ($user['role'] === 'super_admin') {
-                    header('Location: super_admin_dashboard.php');
-                    exit;
-                }
-                if ($user['role'] === 'admin') {
-                    header('Location: admin_dashboard.php');
-                    exit;
-                }
-
-                header('Location: member_dashboard.php');
-                exit;
+            } else {
+                $error = 'Invalid email or password. Please try again.';
             }
-            }
-        } else {
-            $error = 'Invalid email or password. Please try again.';
+        } catch (\PDOException $e) {
+            $error = 'Database Error: ' . $e->getMessage();
+        } catch (\Throwable $e) {
+            $error = 'System Error: ' . $e->getMessage();
         }
     }
     }
