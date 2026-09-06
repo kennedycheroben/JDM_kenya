@@ -32,6 +32,5 @@ scratch/
 .agents/
 .codex/
 
-# Config files (may contain secrets or local-only overrides)
-config.php
+# Config files (use config.local.php for developer-specific local overrides)
 config.local.php
