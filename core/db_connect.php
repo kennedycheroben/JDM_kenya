@@ -60,14 +60,18 @@ if (file_exists($configFile)) {
 }
 
 // Fallback safe defaults if config.php is missing.
-// Credentials must be set in config.php (excluded from VCS via .gitignore).
 if (!defined('DB_HOST')) define('DB_HOST', 'localhost');
 if (!defined('DB_NAME')) define('DB_NAME', '');
 if (!defined('DB_USER')) define('DB_USER', '');
 if (!defined('DB_PASS')) define('DB_PASS', '');
 
+$pdo = null;
+if (empty(DB_NAME) || empty(DB_USER)) {
+    error_log('DB configuration missing: DB_NAME or DB_USER is empty.');
+    die('Database Configuration Error: config.php is missing or incomplete in website root (' . escape(dirname(__DIR__)) . '). Please verify DB_NAME and DB_USER in config.php.');
+}
+
 try {
-    // Establishing a high-performance PDO connection for live production
     $pdo = new PDO(
         'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
         DB_USER,
@@ -80,8 +84,28 @@ try {
         ]
     );
 } catch (PDOException $e) {
-    error_log('DB connection failed: ' . $e->getMessage());
-    die('A critical error occurred. Please try again later.');
+    // If socket connection to localhost failed, attempt TCP connection fallback to 127.0.0.1
+    if (DB_HOST === 'localhost') {
+        try {
+            $pdo = new PDO(
+                'mysql:host=127.0.0.1;dbname=' . DB_NAME . ';charset=utf8mb4',
+                DB_USER,
+                DB_PASS,
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false, 
+                    PDO::ATTR_PERSISTENT => false,        
+                ]
+            );
+        } catch (PDOException $e2) {
+            error_log('DB connection failed (127.0.0.1 fallback): ' . $e2->getMessage());
+            die('Database Connection Error: ' . escape($e->getMessage()));
+        }
+    } else {
+        error_log('DB connection failed: ' . $e->getMessage());
+        die('Database Connection Error: ' . escape($e->getMessage()));
+    }
 }
 
 // Resource Cleanup
