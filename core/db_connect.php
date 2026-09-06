@@ -65,10 +65,17 @@ if (!defined('DB_NAME')) define('DB_NAME', '');
 if (!defined('DB_USER')) define('DB_USER', '');
 if (!defined('DB_PASS')) define('DB_PASS', '');
 
+// Define escape() early so it's available in all error handlers below
+if (!function_exists('escape')) {
+    function escape($value) {
+        return htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
+    }
+}
+
 $pdo = null;
 if (empty(DB_NAME) || empty(DB_USER)) {
     error_log('DB configuration missing: DB_NAME or DB_USER is empty.');
-    die('Database Configuration Error: config.php is missing or incomplete in website root (' . escape(dirname(__DIR__)) . '). Please verify DB_NAME and DB_USER in config.php.');
+    die('Database Configuration Error: config.php is missing or not loaded. Please ensure it exists in the website root and contains DB_NAME and DB_USER.');
 }
 
 try {
@@ -115,6 +122,7 @@ register_shutdown_function(function() use (&$pdo) {
 
 /**
  * Performance-optimized HTML Escaping
+ * (already defined early above for use in error handlers)
  */
 if (!function_exists('escape')) {
     function escape($value) {
