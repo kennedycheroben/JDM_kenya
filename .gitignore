@@ -33,4 +33,5 @@ scratch/
 .codex/
 
 # Config files (use config.local.php for developer-specific local overrides)
+config.php
 config.local.php
