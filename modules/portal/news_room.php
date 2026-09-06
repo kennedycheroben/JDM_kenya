@@ -12,7 +12,7 @@ try {
     $announcements = $pdo->query(
         'SELECT id, title, content, COALESCE(date_created, date_posted) AS date_created
          FROM announcements
-         ORDER BY COALESCE(date_created, date_posted) DESC'
+         ORDER BY COALESCE(date_created, date_posted) DESC, id DESC'
     )->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("Newsroom query error: " . $e->getMessage());
@@ -87,14 +87,14 @@ ob_start();
 <?php else: ?>
     <div class="accordion" id="newsRoomAccordion">
         <?php foreach ($announcements as $i => $a): ?>
-            <div class="accordion-item">
+            <div class="accordion-item announcement-item">
                 <h2 class="accordion-header">
                     <button class="accordion-button <?= $i === 0 ? '' : 'collapsed' ?>" type="button"
                             data-bs-toggle="collapse"
                             data-bs-target="#newsItem<?= (int)$a['id'] ?>"
                             aria-expanded="<?= $i === 0 ? 'true' : 'false' ?>"
                             aria-controls="newsItem<?= (int)$a['id'] ?>">
-                        <span class="flex-grow-1"><?= escape($a['title']) ?></span>
+                        <span class="flex-grow-1 fw-bold"><?= escape($a['title']) ?></span>
                         <span class="date-badge me-3"><?= date('M d, Y', strtotime($a['date_created'])) ?></span>
                     </button>
                 </h2>
@@ -102,7 +102,14 @@ ob_start();
                      class="accordion-collapse collapse <?= $i === 0 ? 'show' : '' ?>"
                      data-bs-parent="#newsRoomAccordion">
                     <div class="accordion-body text-secondary" style="line-height: 1.7;">
-                        <?= nl2br(escape($a['content'])) ?>
+                        <?php if (mb_strlen($a['content']) > 150): ?>
+                            <details class="announcement-toggle">
+                                <summary><span class="announcement-preview fw-normal"><?= escape(mb_substr($a['content'], 0, 150)) ?>&hellip;</span><span class="mt-2 text-primary fw-semibold announcement-more">View more</span><span class="mt-2 text-primary fw-semibold announcement-less">View less</span></summary>
+                                <div class="announcement-full mt-2"><?= nl2br(escape($a['content'])) ?></div>
+                            </details>
+                        <?php else: ?>
+                            <div class="announcement-full"><?= nl2br(escape($a['content'])) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>

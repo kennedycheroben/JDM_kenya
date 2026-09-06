@@ -1,0 +1,3 @@
+.bs-hero{background:linear-gradient(135deg,#2c5ead,#1591dc);color:#fff;border-radius:1rem;padding:clamp(1.25rem,4vw,2.5rem);box-shadow:0 12px 30px rgba(44,94,173,.2)}
+.session-card{border:2px solid transparent;transition:border-color .2s,transform .2s}.session-card:hover{transform:translateY(-2px)}.session-card.selected{border-color:#2c5ead;background:#f5f9ff}
+.session-card :focus-visible,.bs-hero+* :focus-visible{outline:3px solid #ffbf47;outline-offset:2px}@media(max-width:375px){.card-body{padding:1rem}.btn{white-space:normal}}

@@ -92,6 +92,32 @@ $show_gbs_switch_prompt = $is_gbs_leader && !$is_gbs_page;
 
 $is_admin = ($user_role === 'admin' || $user_role === 'super_admin') && !$is_impersonating_member;
 $is_super_admin = ($user_role === 'super_admin') && !$is_impersonating_member;
+$is_bible_study_leader = false;
+$is_sports_admin = false;
+$sports_application = null;
+$sports_action_url = 'join_sports_ministry.php';
+$sports_action_label = 'Join Sports Ministry';
+if ($user_id > 0) {
+    try {
+        $stmtBsLeader = $pdo->prepare('SELECT 1 FROM bible_study_leader_assignments WHERE leader_user_id = ? AND is_current = 1 LIMIT 1');
+        $stmtBsLeader->execute([$user_id]);
+        $is_bible_study_leader = (bool)$stmtBsLeader->fetchColumn();
+    } catch (Throwable $e) {
+        // Migration may not yet be installed; keep existing navigation functional.
+    }
+    try {
+        require_once dirname(__DIR__, 2) . '/core/sports_authorization.php';
+        $is_sports_admin = sports_can_admin($pdo, $user_id);
+        $sports_application = sports_application_for_user($pdo, $user_id);
+        if ($sports_application) {
+            $sports_action_url = 'sports_application_status.php';
+            $sports_action_label = $sports_application['status'] === 'pending' ? 'Sports Application Pending' : 'Sports Application Status';
+            if ($sports_application['status'] === 'approved') $sports_action_label = 'My Sports Ministry';
+        }
+    } catch (Throwable $e) {
+        // The additive sports migration may not yet be installed.
+    }
+}
 
 // Dynamic dual-role badge system
 function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $current_page) {
@@ -207,6 +233,9 @@ if (!isset($page_title)) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style_dashboard.css">
+    <?php if (!empty($page_styles) && is_array($page_styles)): foreach ($page_styles as $stylePath): ?>
+        <link rel="stylesheet" href="<?= escape($stylePath) ?>">
+    <?php endforeach; endif; ?>
     <?php
     $about_pages = ['about.php','about_ministry.php','about_history_spirit.php','about_inner_feature.php','about_outer_feature.php'];
     if (in_array($current_page, $about_pages)) {
@@ -271,6 +300,38 @@ if (!isset($page_title)) {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        .announcement-toggle > summary {
+            cursor: pointer;
+            list-style: none;
+        }
+        .announcement-toggle > summary::-webkit-details-marker { display: none; }
+        .announcement-toggle .announcement-more,
+        .announcement-toggle .announcement-less { display: block; }
+        .announcement-toggle .announcement-less { display: none; }
+        .announcement-toggle[open] {
+            display: flex;
+            flex-direction: column;
+        }
+        .announcement-toggle[open] > summary {
+            order: 2;
+            margin-top: 0.5rem;
+        }
+        .announcement-toggle[open] > .announcement-full { order: 1; }
+        .announcement-toggle[open] .announcement-preview { display: none; }
+        .announcement-toggle[open] .announcement-more { display: none; }
+        .announcement-toggle[open] .announcement-less { display: inline; }
+        .announcement-preview { font-weight: 400; }
+        .announcement-full {
+            overflow-wrap: anywhere;
+            white-space: normal;
+            line-height: 1.7;
+            font-weight: 400;
+        }
+        .announcement-item {
+            margin-bottom: 0.75rem;
+            border: 1px solid rgba(0, 0, 0, 0.125) !important;
+            border-radius: 0.5rem !important;
         }
 
         /* ── Dashboard Switcher Button ── */
@@ -553,6 +614,25 @@ if (!isset($page_title)) {
                         <i class="bi bi-house-door"></i> Dashboard
                     </a>
                 </li>
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white" href="bible_study.php">
+                        <i class="bi bi-book-half"></i> Bible Study
+                    </a>
+                </li>
+                <?php if ($is_bible_study_leader): ?>
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white" href="bible_study_leader.php">
+                        <i class="bi bi-journal-check"></i> Study Leader
+                    </a>
+                </li>
+                <?php endif; ?>
+                <?php if ($is_super_admin): ?>
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white" href="bible_study_admin.php">
+                        <i class="bi bi-calendar2-week"></i> Study Admin
+                    </a>
+                </li>
+                <?php endif; ?>
 
                 <?php if($is_admin): ?>
                     <li class="nav-item mb-2">
@@ -612,11 +692,12 @@ if (!isset($page_title)) {
                             <i class="bi bi-envelope"></i> Contact Messages
                         </a>
                     </li>
-                    <li class="nav-item mb-2">
+                    <?php if ($is_sports_admin): ?><li class="nav-item mb-2">
                         <a class="nav-link text-white" href="sports_admin.php">
                             <i class="bi bi-trophy-fill text-warning"></i> Sports Admin
                         </a>
-                    </li>
+                    </li><?php endif; ?>
+                    <li class="nav-item mb-2"><a class="nav-link text-white" href="<?= escape($sports_action_url) ?>"><i class="bi bi-person-plus"></i> <?= escape($sports_action_label) ?></a></li>
 
                 <?php else: ?>
                     <li class="nav-item mb-2">
@@ -663,7 +744,11 @@ if (!isset($page_title)) {
                         <a class="nav-link text-white" href="sports.php">
                             <i class="bi bi-trophy"></i> Sports Ministry
                         </a>
-                    </li>                    
+                    </li>
+                    <li class="nav-item mb-2"><a class="nav-link text-white" href="<?= escape($sports_action_url) ?>"><i class="bi bi-person-plus"></i> <?= escape($sports_action_label) ?></a></li>
+                    <?php if ($is_sports_admin): ?>
+                    <li class="nav-item mb-2"><a class="nav-link text-white" href="sports_admin.php"><i class="bi bi-clipboard2-check"></i> Sports Admin Dashboard</a></li>
+                    <?php endif; ?>
                 <li class="nav-item mb-2">
                     <a class="nav-link text-white" href="about.php">
                         <i class="bi bi-info-circle"></i> About

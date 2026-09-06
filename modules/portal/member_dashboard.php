@@ -210,6 +210,12 @@ $stmt->execute([$user_id]);
 $unreadResult = $stmt->fetch(PDO::FETCH_ASSOC);
 $unreadCount = (int)($unreadResult['unread_count'] ?? 0);
 
+require_once dirname(__DIR__, 2) . '/core/sports_authorization.php';
+$dashboardSportsApplication = sports_application_for_user($pdo, (int)$user_id);
+$dashboardSportsUrl = $dashboardSportsApplication ? 'sports_application_status.php' : 'join_sports_ministry.php';
+$dashboardSportsLabel = !$dashboardSportsApplication ? 'Join Sports Ministry' : ($dashboardSportsApplication['status']==='pending' ? 'Sports Application Pending' : 'Sports Application Status');
+if (($dashboardSportsApplication['status'] ?? '') === 'approved') $dashboardSportsLabel = 'My Sports Ministry';
+
 // Start output buffering
 ob_start();
 ?>
@@ -221,6 +227,8 @@ ob_start();
         <p class="text-muted">Access your resources and stay updated with JDM Kenya</p>
     </div>
 </div>
+
+<div class="alert alert-success d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4"><div><strong>Sports Ministry</strong><div class="small">Apply with your existing JDM account without changing your current membership access.</div></div><a class="btn btn-success" href="<?=escape($dashboardSportsUrl)?>"><?=escape($dashboardSportsLabel)?></a></div>
 
 <!-- Member Info Cards -->
 <div class="row mb-4">

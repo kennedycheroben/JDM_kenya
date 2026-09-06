@@ -183,7 +183,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 // Fetch data
 $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchAll(PDO::FETCH_ASSOC);
 $resources = $pdo->query('SELECT * FROM resources ORDER BY upload_date DESC')->fetchAll(PDO::FETCH_ASSOC);
-$announcements = $pdo->query('SELECT *, COALESCE(date_created, date_posted) AS date_created_safe FROM announcements ORDER BY COALESCE(date_created, date_posted) DESC LIMIT 20')->fetchAll(PDO::FETCH_ASSOC);
+$announcements = $pdo->query('SELECT *, COALESCE(date_created, date_posted) AS date_created_safe FROM announcements ORDER BY COALESCE(date_created, date_posted) DESC, id DESC LIMIT 20')->fetchAll(PDO::FETCH_ASSOC);
 $galleryImages = $pdo->query('SELECT * FROM gallery_images ORDER BY uploaded_at DESC LIMIT 20')->fetchAll(PDO::FETCH_ASSOC);
 $contactMessages = $pdo->query('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 100')->fetchAll(PDO::FETCH_ASSOC);
 $unreadContactMessages = (int)$pdo->query("SELECT COUNT(*) FROM contact_messages WHERE status = 'unread'")->fetchColumn();
@@ -555,9 +555,20 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                     <?php if (count($announcements) > 0): ?>
                         <div class="list-group list-group-flush">
                             <?php foreach ($announcements as $ann): ?>
-                                <div class="list-group-item">
-                                    <h6 class="mb-1"><?= escape($ann['title']) ?></h6>
-                                    <p class="mb-1"><?= escape(mb_strimwidth($ann['content'], 0, 150, '...')) ?></p>
+                                <div class="list-group-item announcement-item p-3">
+                                    <h6 class="mb-2 fw-bold"><?= escape($ann['title']) ?></h6>
+                                    <?php if (mb_strlen($ann['content']) > 150): ?>
+                                        <details class="announcement-toggle mb-1">
+                                            <summary>
+                                                <span class="announcement-preview"><?= escape(mb_substr($ann['content'], 0, 150)) ?>&hellip;</span>
+                                                <span class="mt-1 text-primary fw-semibold announcement-more">View more</span>
+                                                <span class="mt-1 text-primary fw-semibold announcement-less">View less</span>
+                                            </summary>
+                                            <div class="announcement-full mt-2"><?= nl2br(escape($ann['content'])) ?></div>
+                                        </details>
+                                    <?php else: ?>
+                                        <div class="announcement-full mb-1"><?= nl2br(escape($ann['content'])) ?></div>
+                                    <?php endif; ?>
                                     <small class="text-muted"><?= date('M d, Y H:i', strtotime($ann['date_created_safe'])) ?></small>
                                 </div>
                             <?php endforeach; ?>

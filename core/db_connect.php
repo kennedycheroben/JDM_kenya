@@ -4,6 +4,11 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
+    $sessionCookieName = getenv('JDM_SESSION_COOKIE') ?: 'jdm_kenya_session';
+    if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sessionCookieName)) {
+        $sessionCookieName = 'jdm_kenya_session';
+    }
+    session_name($sessionCookieName);
     $sessionPath = session_save_path();
     if ($sessionPath === '' || !is_writable($sessionPath)) {
         $fallbackSessionPath = dirname(__DIR__) . '/tmp/sessions';
@@ -243,3 +248,8 @@ if (!function_exists('enforce_rate_limit')) {
 
 // Enforce global rate limit on every page
 enforce_rate_limit();
+
+// Central restriction for authenticated Sports Ministry applicants. The helper
+// is migration-aware and becomes a no-op until the sports tables exist.
+require_once __DIR__ . '/sports_authorization.php';
+sports_apply_central_access_gate($pdo);

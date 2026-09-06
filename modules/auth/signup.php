@@ -1,6 +1,7 @@
 <?php
 
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/sports_service.php';
 
 if (isset($_SESSION['user_role']) && !empty($_SESSION['user_role'])) {
     header('Location: index.php');
@@ -29,8 +30,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $birthMonth = (int)($_POST['birth_month'] ?? 0);
     $birthDay = (int)($_POST['birth_day'] ?? 0);
 
-    $allowedCategories = ['student', 'associate', 'partner', 'missionary', 'other'];
+    $allowedCategories = ['student', 'associate', 'partner', 'missionary', 'sports_ministry', 'other'];
     $allowedCampuses = ['Main Campus', 'Upper Kabete', 'Lower Kabete', 'Chiromo', 'Kikuyu', 'Parklands'];
+
+    $sportsValidation = null;
+    if ($category === 'sports_ministry') {
+        $sportsValidation = sports_validate_application($_POST, new DateTimeImmutable('today', new DateTimeZone('Africa/Nairobi')));
+    }
 
     if ($name === '' || $email === '' || $category === '' || $password === '' || $confirm === '') {
         $error = 'Please fill in all required fields.';
@@ -46,6 +52,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $error = 'Please select your country of origin.';
     } elseif ($category !== 'missionary' && $whatsappPhone === '') {
         $error = 'WhatsApp phone number is required.';
+    } elseif ($category === 'sports_ministry' && !empty($sportsValidation['errors'])) {
+        $error = $sportsValidation['errors'][0];
     } elseif ($birthYear !== 0 && (!checkdate($birthMonth, $birthDay, $birthYear) || $birthYear < 1920 || $birthYear > (int)date('Y') - 13)) {
         $error = 'Please enter a valid date of birth.';
     } elseif ($password !== $confirm) {
@@ -59,9 +67,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $hash = password_hash($password, PASSWORD_DEFAULT);
             try {
                 $pdo->beginTransaction();
-                $dateOfBirth = ($birthYear !== 0 && $birthMonth !== 0 && $birthDay !== 0)
+                $dateOfBirth = $category === 'sports_ministry'
+                    ? $sportsValidation['dob']
+                    : (($birthYear !== 0 && $birthMonth !== 0 && $birthDay !== 0)
                     ? sprintf('%04d-%02d-%02d', $birthYear, $birthMonth, $birthDay)
-                    : null;
+                    : null);
 
                 $gradYearParam = null;
                 $campusRoleParam = null;
@@ -98,7 +108,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $industryProfessionParam = $currentProfession !== '' ? trim($currentProfession) : null;
                 }
 
-                $isApproved = ($category === 'partner' || $category === 'missionary') ? 0 : 1;
+                $isApproved = in_array($category, ['partner', 'missionary', 'sports_ministry'], true) ? 0 : 1;
+                if ($category === 'sports_ministry') {
+                    $whatsappPhone = sports_normalize_phone($whatsappPhone) ?? $whatsappPhone;
+                }
 
                 $insert = $pdo->prepare('
                     INSERT INTO users (
@@ -125,6 +138,31 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 } elseif ($category === 'associate') {
                     $stmt2 = $pdo->prepare('INSERT INTO associates (user_id, graduation_year, current_profession) VALUES (?, ?, ?)');
                     $stmt2->execute([$userId, $gradYearParam, $industryProfessionParam]);
+                } elseif ($category === 'sports_ministry') {
+                    $isMinor = $sportsValidation['age'] < 18;
+                    $now = (new DateTimeImmutable('now', new DateTimeZone('Africa/Nairobi')))->format('Y-m-d H:i:s');
+                    $hasApplicationSource=sports_column_exists($pdo,'sports_applications','application_source');
+                    $stmt2 = $pdo->prepare($hasApplicationSource ? 'INSERT INTO sports_applications
+                        (user_id,application_source,date_of_birth,general_estate,education_level,primary_position,preferred_jersey_number,
+                         guardian_name,guardian_phone,guardian_consent_at,guardian_policy_version,rules_accepted_at,
+                         publication_acknowledged_at,publication_policy_version,status,submitted_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)' : 'INSERT INTO sports_applications
+                        (user_id,date_of_birth,general_estate,education_level,primary_position,preferred_jersey_number,
+                         guardian_name,guardian_phone,guardian_consent_at,guardian_policy_version,rules_accepted_at,
+                         publication_acknowledged_at,publication_policy_version,status,submitted_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                    $applicationValues=[
+                        $userId, 'new_user', $sportsValidation['dob'], trim($_POST['general_estate']), $_POST['education_level'],
+                        $_POST['primary_position'], $sportsValidation['jersey'],
+                        $isMinor ? trim($_POST['guardian_name']) : null,
+                        $isMinor ? sports_normalize_phone($_POST['guardian_phone']) : null,
+                        $isMinor ? $now : null, $isMinor ? SPORTS_POLICY_VERSION : null,
+                        $now, $now, SPORTS_POLICY_VERSION, 'pending', $now
+                    ];if(!$hasApplicationSource)array_splice($applicationValues,1,1);$stmt2->execute($applicationValues);
+                    $reviewers = $pdo->query("SELECT id FROM users WHERE role='super_admin' UNION SELECT user_id FROM sports_admin_assignments WHERE status='active' AND ended_at IS NULL")->fetchAll(PDO::FETCH_COLUMN);
+                    foreach (array_unique(array_map('intval', $reviewers)) as $reviewerId) {
+                        sports_notify($pdo, $userId, $reviewerId, 'A new Sports Ministry application is awaiting authorized review.');
+                    }
                 }
 
                 $pdo->commit();
@@ -137,7 +175,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
             if ($error !== '') {
             } else {
-            $redirectParam = ($category === 'partner' || $category === 'missionary') ? '?registration=pending' : '';
+            $redirectParam = in_array($category, ['partner', 'missionary', 'sports_ministry'], true) ? '?registration=pending' : '';
             header('Location: login.php' . $redirectParam);
             exit;
             }
@@ -187,9 +225,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                 <option value="associate">Associate</option>
                                 <option value="partner">Office Bearer</option>
                                 <option value="missionary">Missionary</option>
+                                <option value="sports_ministry">Sports Ministry</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
+                        <fieldset id="sportsFields" class="card border-success mb-3 d-none" aria-describedby="sportsPrivacyNote">
+                            <div class="card-body">
+                                <legend class="h5">Sports Ministry application</legend>
+                                <p id="sportsPrivacyNote" class="small text-muted">Your name, calculated age, general estate, education level, playing position, approved photo and verified sports information may be public after approval and review. Your exact birth date, phone and guardian details always remain private.</p>
+                                <div class="mb-3"><label for="sports_date_of_birth" class="form-label">Date of birth</label><input type="date" class="form-control sports-required" id="sports_date_of_birth" name="sports_date_of_birth" max="<?= date('Y-m-d') ?>"></div>
+                                <div class="mb-3"><label for="general_estate" class="form-label">General estate or neighbourhood</label><input class="form-control sports-required" id="general_estate" name="general_estate" maxlength="120" placeholder="e.g. Umoja"></div>
+                                <div class="mb-3"><label for="education_level" class="form-label">Education level</label><select class="form-select sports-required" id="education_level" name="education_level"><option value="">Select level</option><option value="primary_school">Primary school</option><option value="high_school">High school</option><option value="college_university">College/University</option><option value="graduate">Graduate</option></select></div>
+                                <div class="mb-3"><label for="primary_position" class="form-label">Primary playing position</label><select class="form-select sports-required" id="primary_position" name="primary_position"><option value="">Select position</option><option value="goalkeeper">Goalkeeper</option><option value="right_back">Right Back</option><option value="centre_back">Centre Back</option><option value="left_back">Left Back</option><option value="defensive_midfielder">Defensive Midfielder</option><option value="central_midfielder">Central Midfielder</option><option value="attacking_midfielder">Attacking Midfielder</option><option value="right_winger">Right Winger</option><option value="left_winger">Left Winger</option><option value="striker">Striker</option><option value="not_sure">Not Sure Yet</option></select></div>
+                                <div class="mb-3"><label for="preferred_jersey_number" class="form-label">Preferred jersey number</label><input type="number" min="1" max="99" class="form-control sports-required" id="preferred_jersey_number" name="preferred_jersey_number"><div class="form-text">A preference only; an official number is assigned by Sports Ministry administration.</div></div>
+                                <div id="guardianFields" class="border rounded p-3 mb-3 d-none"><h6>Guardian authorization (under 18)</h6><div class="mb-3"><label for="guardian_name" class="form-label">Guardian name</label><input class="form-control guardian-required" id="guardian_name" name="guardian_name" maxlength="120"></div><div class="mb-3"><label for="guardian_phone" class="form-label">Guardian phone</label><input type="tel" class="form-control guardian-required" id="guardian_phone" name="guardian_phone" maxlength="30"></div><div class="form-check"><input class="form-check-input guardian-required" type="checkbox" id="guardian_consent" name="guardian_consent" value="1"><label class="form-check-label" for="guardian_consent">My guardian authorizes this application and the described safe public profile.</label></div></div>
+                                <div class="form-check mb-2"><input class="form-check-input sports-required" type="checkbox" id="sports_rules_accepted" name="sports_rules_accepted" value="1"><label class="form-check-label" for="sports_rules_accepted">I have read and accept the <a href="<?= BASE_PATH ?>/sports_rules.php" target="_blank" rel="noopener">Sports Ministry rules<span class="visually-hidden"> (opens in a new tab)</span></a>.</label></div>
+                                <div class="form-check"><input class="form-check-input sports-required" type="checkbox" id="publication_acknowledged" name="publication_acknowledged" value="1"><label class="form-check-label" for="publication_acknowledged">I acknowledge that the approved safe profile information described above will become publicly visible.</label></div>
+                            </div>
+                        </fieldset>
                         <div class="mb-3">
                             <label class="form-label">WhatsApp Phone Number</label>
                             <input type="number" name="whatsapp_phone" id="whatsapp_phone" class="form-control" placeholder="0712345678" required>
@@ -569,6 +622,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/sports_registration.js" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const category = document.getElementById('category');

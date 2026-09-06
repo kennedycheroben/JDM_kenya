@@ -1,198 +1,80 @@
 <?php
-require_once dirname(__FILE__) . '/../../core/db_connect.php';
-require_once dirname(__FILE__) . '/../../core/sports_schema.php';
-
-$userRole = $_SESSION['user_role'] ?? null;
-if ($userRole !== 'admin' && $userRole !== 'super_admin') {
-    header('Location: ' . BASE_PATH . '/sports.php');
-    exit;
+require_once dirname(__DIR__,2).'/core/db_connect.php'; require_once dirname(__DIR__,2).'/core/sports_service.php';
+header('Cache-Control: no-store, private, max-age=0');
+$missingSportsAdminSchema=sports_admin_schema_missing($pdo);
+if($missingSportsAdminSchema){
+ error_log('[sports_admin] Incomplete Sports Ministry schema: '.implode(', ',$missingSportsAdminSchema));
+ http_response_code(503);header('Retry-After: 3600');
+ ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sports Admin maintenance | JDM Kenya</title><style>body{font-family:system-ui,sans-serif;background:#f5f7fa;color:#20242a;margin:0}.notice{max-width:720px;margin:10vh auto;padding:2rem;background:#fff;border:1px solid #dde3ea;border-radius:12px;box-shadow:0 8px 30px #0001}code{background:#eef1f4;padding:.15rem .35rem;border-radius:4px}</style></head><body><main class="notice"><h1>Sports Admin database update required</h1><p>The Sports Ministry database migration has not been completed. A server administrator must run <code>php migrate_sports_schema.php</code> from the website root.</p></main></body></html><?php exit;
 }
-
-try {
-    ensure_sports_schema($pdo);
-} catch (Throwable $e) {
-    error_log('sports_admin schema setup: ' . $e->getMessage());
-    $schemaError = 'Sports tables could not be prepared. Please check the database setup.';
+$actor=sports_require_admin($pdo); $isSuper=sports_is_super_admin($pdo,$actor);
+function sports_admin_redirect(string $type,string $message){$_SESSION['sports_admin_flash']=[$type,$message];header('Location: '.BASE_PATH.'/sports_admin.php');exit;}
+if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+ if(!require_csrf())sports_admin_redirect('danger','Your session expired. Please reload and try again.');
+ if(!check_rate_limit('sports_admin_action',60,300))sports_admin_redirect('danger','Too many updates. Please wait and retry.');
+ $action=(string)($_POST['action']??'');
+ try{
+  if(in_array($action,['approve_application','reject_application','suspend_member','reinstate_member'],true)){
+   $applicationId=(int)($_POST['application_id']??0);$pdo->beginTransaction();$q=$pdo->prepare('SELECT a.id,a.user_id,a.status,a.primary_position,a.publication_acknowledged_at,a.guardian_consent_at,a.date_of_birth FROM sports_applications a WHERE a.id=? FOR UPDATE');$q->execute([$applicationId]);$app=$q->fetch();if(!$app)throw new RuntimeException('Application not found.');
+   if($action==='approve_application'){
+    if($app['status']!=='pending')throw new RuntimeException('Only a pending application can be approved.');
+    if(sports_age($app['date_of_birth'])<18&&!$app['guardian_consent_at'])throw new RuntimeException('Guardian authorization is missing.');
+    $pdo->prepare("UPDATE sports_applications SET status='approved',reviewed_by=?,reviewed_at=NOW(),applicant_message=?,internal_review_note=? WHERE id=?")->execute([$actor,trim($_POST['applicant_message']??''),trim($_POST['internal_note']??''),$applicationId]);
+    $pdo->prepare("UPDATE users SET is_approved=1 WHERE id=? AND category='sports_ministry'")->execute([$app['user_id']]);
+    $pdo->prepare("INSERT INTO sports_members(user_id,application_id,membership_status,primary_position,joined_at) VALUES (?,?,'active',?,NOW()) ON DUPLICATE KEY UPDATE membership_status='active',suspended_at=NULL,primary_position=VALUES(primary_position)")->execute([$app['user_id'],$applicationId,$app['primary_position']]);
+    $member=(int)$pdo->query('SELECT LAST_INSERT_ID()')->fetchColumn();if(!$member){$x=$pdo->prepare('SELECT id FROM sports_members WHERE application_id=?');$x->execute([$applicationId]);$member=(int)$x->fetchColumn();}
+    $pdo->prepare("INSERT IGNORE INTO sports_role_assignments(sports_member_id,role_code,appointed_by,starts_at,status) VALUES (?,'player',?,CURDATE(),'active')")->execute([$member,$actor]);
+    $pdo->prepare('INSERT IGNORE INTO sports_public_profiles(sports_member_id,public_identifier) VALUES (?,?)')->execute([$member,bin2hex(random_bytes(16))]);sports_audit($pdo,$actor,'application_approved','sports_application',$applicationId);sports_notify($pdo,$actor,(int)$app['user_id'],'Your Sports Ministry application has been approved. You can now access the JDM member portal.');$message='Application approved.';
+   }elseif($action==='reject_application'){
+    if($app['status']!=='pending')throw new RuntimeException('Only a pending application can be rejected.');$note=trim($_POST['internal_note']??'');if($note==='')throw new RuntimeException('An internal rejection reason is required.');
+    $pdo->prepare("UPDATE sports_applications SET status='rejected',reviewed_by=?,reviewed_at=NOW(),applicant_message=?,internal_review_note=? WHERE id=?")->execute([$actor,trim($_POST['applicant_message']??''),$note,$applicationId]);sports_audit($pdo,$actor,'application_rejected','sports_application',$applicationId);sports_notify($pdo,$actor,(int)$app['user_id'],'A decision has been recorded for your Sports Ministry application. Sign in to view the safe applicant-facing message.');$message='Application rejected and preserved.';
+   }elseif($action==='suspend_member'){
+    $note=trim($_POST['internal_note']??'');if($note==='')throw new RuntimeException('A suspension reason is required.');if($app['status']!=='approved')throw new RuntimeException('Only an approved member can be suspended.');
+    $pdo->prepare("UPDATE sports_applications SET status='suspended',internal_review_note=?,reviewed_by=?,reviewed_at=NOW() WHERE id=?")->execute([$note,$actor,$applicationId]);$pdo->prepare("UPDATE sports_members SET membership_status='suspended',suspended_at=NOW() WHERE application_id=?")->execute([$applicationId]);sports_audit($pdo,$actor,'member_suspended','sports_application',$applicationId);$message='Sports membership suspended; general JDM access was unchanged.';
+   }else{
+    if($app['status']!=='suspended')throw new RuntimeException('Only a suspended member can be reinstated.');$pdo->prepare("UPDATE sports_applications SET status='approved',internal_review_note=NULL,reviewed_by=?,reviewed_at=NOW() WHERE id=?")->execute([$actor,$applicationId]);$pdo->prepare("UPDATE sports_members SET membership_status='active',suspended_at=NULL WHERE application_id=?")->execute([$applicationId]);sports_audit($pdo,$actor,'member_reinstated','sports_application',$applicationId);$message='Sports member reinstated.';
+   }$pdo->commit();sports_admin_redirect('success',$message);
+  }
+  if(in_array($action,['appoint_sports_admin','end_sports_admin'],true)){
+   if(!$isSuper)throw new RuntimeException('Only a super admin may manage Sports Admin appointments.');$target=(int)($_POST['user_id']??0);$note=trim($_POST['note']??'');$pdo->beginTransaction();
+   if($action==='appoint_sports_admin'){$pdo->prepare("INSERT INTO sports_admin_assignments(user_id,appointed_by,appointed_at,status,appointment_note) VALUES (?,?,NOW(),'active',?)")->execute([$target,$actor,$note]);sports_audit($pdo,$actor,'sports_admin_appointed','user',$target);$message='Sports Admin appointed.';}
+   else{$q=$pdo->prepare("UPDATE sports_admin_assignments SET status='ended',ended_at=NOW(),appointment_note=CONCAT(COALESCE(appointment_note,''),' ',?) WHERE user_id=? AND status='active'");$q->execute([$note,$target]);if(!$q->rowCount())throw new RuntimeException('No active appointment found.');sports_audit($pdo,$actor,'sports_admin_ended','user',$target);$message='Sports Admin appointment ended.';}$pdo->commit();sports_admin_redirect('success',$message);
+  }
+  if($action==='update_member'){$member=(int)($_POST['member_id']??0);$position=$_POST['primary_position']??'';$jersey=($_POST['jersey']??'')===''?null:filter_var($_POST['jersey'],FILTER_VALIDATE_INT,['options'=>['min_range'=>1,'max_range'=>99]]);if(!in_array($position,sports_positions(),true))throw new RuntimeException('Invalid position.');if($jersey===false)throw new RuntimeException('Jersey must be 1–99.');$pdo->prepare('UPDATE sports_members SET primary_position=?,assigned_jersey_number=? WHERE id=?')->execute([$position,$jersey,$member]);sports_audit($pdo,$actor,'member_updated','sports_member',$member,['jersey'=>$jersey]);sports_admin_redirect('success','Player assignment updated.');}
+  if($action==='assign_role'){$member=(int)($_POST['member_id']??0);$role=$_POST['role_code']??'';if(!in_array($role,sports_role_codes(),true))throw new RuntimeException('Invalid team responsibility.');$pdo->prepare("INSERT INTO sports_role_assignments(sports_member_id,role_code,appointed_by,starts_at,status,appointment_note) VALUES (?,?,?,CURDATE(),'active',?)")->execute([$member,$role,$actor,trim($_POST['note']??'')]);sports_audit($pdo,$actor,'role_assigned','sports_member',$member,['role'=>$role]);sports_admin_redirect('success','Team responsibility assigned.');}
+  if($action==='end_role'){$id=(int)($_POST['role_id']??0);$pdo->prepare("UPDATE sports_role_assignments SET status='ended',ends_at=CURDATE() WHERE id=? AND status='active'")->execute([$id]);sports_audit($pdo,$actor,'role_ended','sports_role',$id);sports_admin_redirect('success','Team appointment ended; history preserved.');}
+  if($action==='publish_profile'){$member=(int)($_POST['member_id']??0);$publish=!empty($_POST['publish']);$bio=trim($_POST['biography']??'');$achievements=trim($_POST['achievements']??'');if(!sports_public_text_is_safe($bio.' '.$achievements))throw new RuntimeException('Public text appears to contain prohibited contact or payment information.');$photo=!empty($_POST['use_member_photo']);$pdo->prepare('UPDATE sports_public_profiles p JOIN sports_members m ON m.id=p.sports_member_id JOIN users u ON u.id=m.user_id SET p.public_biography=?,p.public_achievements=?,p.profile_photo_path=IF(?,u.pfp_path,NULL),p.is_published=?,p.reviewed_by=?,p.reviewed_at=NOW(),p.published_at=IF(?,NOW(),NULL) WHERE p.sports_member_id=?')->execute([$bio,$achievements,$photo,$publish,$actor,$publish,$member]);sports_audit($pdo,$actor,$publish?'profile_published':'profile_unpublished','sports_member',$member);sports_admin_redirect('success','Public profile reviewed and updated.');}
+  if($action==='create_training'){$date=$_POST['training_date']??'';if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date))throw new RuntimeException('Invalid training date.');$pdo->prepare("INSERT INTO sports_training_sessions(title,training_date,start_time,end_time,location,instructions,status,is_public,created_by) VALUES (?,?,?,?,?,?,'scheduled',?,?)")->execute([trim($_POST['title']),$date,$_POST['start_time'],$_POST['end_time']?:null,trim($_POST['location']),trim($_POST['instructions']??''),!empty($_POST['is_public']),$actor]);sports_audit($pdo,$actor,'training_created','sports_training',(int)$pdo->lastInsertId());sports_admin_redirect('success','Training session created.');}
+  if($action==='cancel_training'){$id=(int)($_POST['training_id']??0);$pdo->prepare("UPDATE sports_training_sessions SET status='cancelled' WHERE id=? AND status='scheduled'")->execute([$id]);sports_audit($pdo,$actor,'training_cancelled','sports_training',$id);sports_admin_redirect('success','Training session cancelled.');}
+  if($action==='record_attendance'){$allowed=['not_recorded','present','absent','excused','late'];$status=$_POST['attendance_status']??'';if(!in_array($status,$allowed,true))throw new RuntimeException('Invalid attendance status.');$session=(int)$_POST['training_id'];$member=(int)$_POST['member_id'];$pdo->prepare("INSERT INTO sports_training_attendance(training_session_id,sports_member_id,attendance_status,remark,recorded_by,recorded_at) VALUES (?,?,?,?,?,NOW()) ON DUPLICATE KEY UPDATE attendance_status=VALUES(attendance_status),remark=VALUES(remark),recorded_by=VALUES(recorded_by),recorded_at=NOW()")->execute([$session,$member,$status,trim($_POST['remark']??''),$actor]);sports_audit($pdo,$actor,'attendance_recorded','sports_training',$session,['member_id'=>$member,'status'=>$status]);sports_admin_redirect('success','Attendance recorded.');}
+  if($action==='create_fixture'){$pdo->prepare("INSERT INTO sports_matches(team_a,team_b,status,start_time,match_type,competition_type,venue,location_type,is_public) VALUES (?,?,'Scheduled',?,?,?,?,?,?)")->execute([trim($_POST['team_a']),trim($_POST['team_b']),$_POST['start_time'],trim($_POST['match_type']??''),trim($_POST['competition_type']??''),trim($_POST['venue']??''),$_POST['location_type']??'neutral',!empty($_POST['is_public'])]);sports_audit($pdo,$actor,'fixture_created','sports_match',(int)$pdo->lastInsertId());sports_admin_redirect('success','Fixture created.');}
+  if($action==='update_result'){$id=(int)$_POST['match_id'];$a=filter_var($_POST['team_a_score'],FILTER_VALIDATE_INT,['options'=>['min_range'=>0,'max_range'=>99]]);$b=filter_var($_POST['team_b_score'],FILTER_VALIDATE_INT,['options'=>['min_range'=>0,'max_range'=>99]]);if($a===false||$b===false)throw new RuntimeException('Scores must be 0–99.');$pdo->prepare("UPDATE sports_matches SET team_a_score=?,team_b_score=?,status='Completed' WHERE id=?")->execute([$a,$b,$id]);sports_audit($pdo,$actor,'result_updated','sports_match',$id);sports_admin_redirect('success','Result published.');}
+  if($action==='fixture_status'){$id=(int)$_POST['match_id'];$status=$_POST['fixture_status']??'';if(!in_array($status,['Scheduled','Ongoing','Postponed','Cancelled'],true))throw new RuntimeException('Invalid fixture status.');$pdo->prepare('UPDATE sports_matches SET status=? WHERE id=?')->execute([$status,$id]);sports_audit($pdo,$actor,'fixture_status_updated','sports_match',$id,['status'=>$status]);sports_admin_redirect('success','Fixture status updated.');}
+  if($action==='add_commentary'){$id=(int)$_POST['match_id'];$text=trim($_POST['comment_text']??'');if($text==='')throw new RuntimeException('Commentary is required.');$pdo->prepare('INSERT INTO sports_commentary(match_id,comment_text) VALUES (?,?)')->execute([$id,$text]);sports_audit($pdo,$actor,'commentary_added','sports_match',$id);sports_admin_redirect('success','Commentary added.');}
+  if($action==='update_stats'){$user=(int)$_POST['user_id'];$values=[];foreach(['appearances','starts','goals_scored','assists','clean_sheets','yellow_cards','red_cards','mvp_awards'] as $f)$values[$f]=max(0,(int)($_POST[$f]??0));$pdo->prepare("INSERT INTO sports_stats(user_id,appearances,starts,goals_scored,assists,clean_sheets,yellow_cards,red_cards,mvp_awards) VALUES (?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE appearances=VALUES(appearances),starts=VALUES(starts),goals_scored=VALUES(goals_scored),assists=VALUES(assists),clean_sheets=VALUES(clean_sheets),yellow_cards=VALUES(yellow_cards),red_cards=VALUES(red_cards),mvp_awards=VALUES(mvp_awards)")->execute([$user,...array_values($values)]);sports_audit($pdo,$actor,'statistics_updated','user',$user);sports_admin_redirect('success','Player statistics updated.');}
+  if($action==='create_announcement'){$public=!empty($_POST['is_public']);$pdo->prepare("INSERT INTO sports_announcements(title,content,status,is_public,published_at,expires_at,created_by) VALUES (?,?,'published',?,IF(?,NOW(),NULL),?,?)")->execute([trim($_POST['title']),trim($_POST['content']),$public,$public,$_POST['expires_at']?:null,$actor]);sports_audit($pdo,$actor,'announcement_published','sports_announcement',(int)$pdo->lastInsertId());sports_admin_redirect('success','Announcement saved.');}
+  if($action==='announcement_visibility'){$id=(int)$_POST['announcement_id'];$publish=!empty($_POST['publish']);$pdo->prepare("UPDATE sports_announcements SET status=?,is_public=?,published_at=IF(?,COALESCE(published_at,NOW()),NULL) WHERE id=?")->execute([$publish?'published':'draft',$publish,$publish,$id]);sports_audit($pdo,$actor,$publish?'announcement_published':'announcement_unpublished','sports_announcement',$id);sports_admin_redirect('success','Announcement visibility updated.');}
+  throw new RuntimeException('Unknown action.');
+ }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Sports admin action: '.$e->getMessage());sports_admin_redirect('danger',$e instanceof RuntimeException?$e->getMessage():'The update could not be completed.');}
 }
-
-$success = '';
-$error = $schemaError ?? '';
-
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
-    require_csrf();
-    if (isset($_POST['create_match'])) {
-        $teamA = trim($_POST['team_a']);
-        $teamB = trim($_POST['team_b']);
-        if ($teamA && $teamB) {
-            $stmt = $pdo->prepare("INSERT INTO sports_matches (team_a, team_b, status, start_time) VALUES (?, ?, 'Ongoing', NOW())");
-            $stmt->execute([$teamA, $teamB]);
-            $success = "Match created and set as Ongoing.";
-        } else {
-            $error = "Team names cannot be empty.";
-        }
-    } elseif (isset($_POST['end_match'])) {
-        $matchId = (int)$_POST['match_id'];
-        $pdo->prepare("UPDATE sports_matches SET status = 'Completed' WHERE id = ?")->execute([$matchId]);
-        $success = "Match marked as Completed.";
-    } elseif (isset($_POST['add_commentary'])) {
-        $matchId = (int)$_POST['match_id'];
-        $comment = trim($_POST['comment_text']);
-        if ($matchId && $comment) {
-            $stmt = $pdo->prepare("INSERT INTO sports_commentary (match_id, comment_text) VALUES (?, ?)");
-            $stmt->execute([$matchId, $comment]);
-            $success = "Commentary added.";
-        } else {
-            $error = "Commentary text cannot be empty.";
-        }
-    } elseif (isset($_POST['update_stats'])) {
-        $playerId = (int)$_POST['user_id'];
-        $goals = (int)$_POST['goals'];
-        $assists = (int)$_POST['assists'];
-        $mvp = (int)$_POST['mvp_awards'];
-        
-        if ($playerId) {
-            $stmt = $pdo->prepare("SELECT id FROM sports_stats WHERE user_id = ?");
-            $stmt->execute([$playerId]);
-            if ($stmt->fetch()) {
-                $pdo->prepare("UPDATE sports_stats SET goals_scored = goals_scored + ?, assists = assists + ?, mvp_awards = mvp_awards + ? WHERE user_id = ?")->execute([$goals, $assists, $mvp, $playerId]);
-            } else {
-                $pdo->prepare("INSERT INTO sports_stats (user_id, goals_scored, assists, mvp_awards) VALUES (?, ?, ?, ?)")->execute([$playerId, $goals, $assists, $mvp]);
-            }
-            $success = "Player stats updated successfully.";
-        } else {
-            $error = "Please select a player.";
-        }
-    }
-}
-
-// Fetch data with graceful fallback if tables were just created
-$ongoingMatches = [];
-$users = [];
-try {
-    $ongoingMatches = $pdo->query("SELECT * FROM sports_matches WHERE status = 'Ongoing' ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) {
-    $error = 'Could not load matches. Please refresh the page.';
-    error_log('sports_admin matches query: ' . $e->getMessage());
-}
-try {
-    $users = $pdo->query("SELECT id, name FROM users ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) {
-    $error = 'Could not load users. Please refresh the page.';
-    error_log('sports_admin users query: ' . $e->getMessage());
-}
-
-$page_title = "Sports Ministry Admin - JDM Kenya";
-ob_start();
+$flash=$_SESSION['sports_admin_flash']??null;unset($_SESSION['sports_admin_flash']);
+$counts=$pdo->query("SELECT SUM(status='pending') pending,SUM(status='approved') approved,SUM(status='rejected') rejected,SUM(status='suspended') suspended FROM sports_applications")->fetch();
+$apps=$pdo->query("SELECT a.id,a.status,a.submitted_at,a.date_of_birth,a.general_estate,a.education_level,a.primary_position,a.preferred_jersey_number,a.guardian_consent_at,u.name FROM sports_applications a JOIN users u ON u.id=a.user_id ORDER BY FIELD(a.status,'pending','approved','suspended','rejected','withdrawn'),a.submitted_at DESC LIMIT 100")->fetchAll();
+$members=$pdo->query("SELECT m.id,m.user_id,m.application_id,m.membership_status,m.primary_position,m.assigned_jersey_number,u.name,p.is_published,p.public_biography,p.public_achievements FROM sports_members m JOIN users u ON u.id=m.user_id LEFT JOIN sports_public_profiles p ON p.sports_member_id=m.id ORDER BY u.name LIMIT 100")->fetchAll();
+$matches=$pdo->query('SELECT id,team_a,team_b,status,start_time,team_a_score,team_b_score FROM sports_matches ORDER BY start_time DESC LIMIT 50')->fetchAll();$sessions=$pdo->query('SELECT id,title,training_date,start_time,status,is_public FROM sports_training_sessions ORDER BY training_date DESC LIMIT 50')->fetchAll();$audits=$pdo->query("SELECT l.action,l.entity_type,l.created_at,u.name actor_name FROM sports_audit_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.id DESC LIMIT 50")->fetchAll();$rolesActive=$pdo->query("SELECT r.id,r.role_code,u.name FROM sports_role_assignments r JOIN sports_members m ON m.id=r.sports_member_id JOIN users u ON u.id=m.user_id WHERE r.status='active' AND r.role_code<>'player' ORDER BY r.role_code,u.name")->fetchAll();$announcementRows=$pdo->query("SELECT id,title,status,is_public FROM sports_announcements ORDER BY updated_at DESC LIMIT 50")->fetchAll();
+$admins=$isSuper?$pdo->query("SELECT a.user_id,u.name,a.appointed_at FROM sports_admin_assignments a JOIN users u ON u.id=a.user_id WHERE a.status='active' ORDER BY u.name")->fetchAll():[];$users=$isSuper?$pdo->query("SELECT id,name FROM users WHERE role<>'super_admin' ORDER BY name")->fetchAll():[];
+function admin_label(string $v):string{return ucwords(str_replace('_',' ',$v));}
+$page_title='Sports Admin Dashboard - JDM Kenya';ob_start();
 ?>
-<div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-center">
-        <div>
-            <h2><i class="bi bi-gear-fill text-warning"></i> Sports Admin Panel</h2>
-            <p class="text-muted mb-0">Manage live matches, commentary, and player leaderboards.</p>
-        </div>
-        <a href="<?= BASE_PATH ?>/sports.php" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Hub</a>
-    </div>
-</div>
-
-<?php if ($success): ?>
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle"></i> <?= escape($success) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-<?php endif; ?>
-<?php if ($error): ?>
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <i class="bi bi-exclamation-triangle"></i> <?= escape($error) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-<?php endif; ?>
-
-<div class="row g-4">
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm rounded-4 h-100">
-            <div class="card-header bg-success text-white rounded-top-4 pt-3 pb-2">
-                <h5 class="mb-0"><i class="bi bi-play-circle"></i> Match Management</h5>
-            </div>
-            <div class="card-body">
-                <h6>Create New Match</h6>
-                <form method="POST" class="mb-4">
-                    <?= csrf_field() ?>
-                    <div class="row g-2 align-items-center mb-3">
-                        <div class="col"><input type="text" name="team_a" class="form-control" placeholder="Team A" required></div>
-                        <div class="col-auto"><span class="badge bg-danger">VS</span></div>
-                        <div class="col"><input type="text" name="team_b" class="form-control" placeholder="Team B" required></div>
-                    </div>
-                    <button type="submit" name="create_match" class="btn btn-success w-100"><i class="bi bi-plus-circle"></i> Start Match</button>
-                </form>
-
-                <hr>
-
-                <h6>Ongoing Matches & Commentary</h6>
-                <?php if ($ongoingMatches): ?>
-                    <?php foreach ($ongoingMatches as $match): ?>
-                        <div class="p-3 rounded mb-3 bg-light border">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong class="fs-5"><?= escape($match['team_a']) ?> vs <?= escape($match['team_b']) ?></strong>
-                                <form method="POST" onsubmit="return confirm('End this match?');">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="match_id" value="<?= $match['id'] ?>">
-                                    <button type="submit" name="end_match" class="btn btn-sm btn-outline-danger">End Match</button>
-                                </form>
-                            </div>
-                            <form method="POST" class="d-flex gap-2">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="match_id" value="<?= $match['id'] ?>">
-                                <input type="text" name="comment_text" class="form-control form-control-sm" placeholder="Live commentary (e.g., Goal by John!)" required>
-                                <button type="submit" name="add_commentary" class="btn btn-sm btn-primary flex-shrink-0">Add</button>
-                            </form>
-                        </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <p class="text-muted small">No ongoing matches found.</p>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm rounded-4 h-100">
-            <div class="card-header bg-success text-white rounded-top-4 pt-3 pb-2">
-                <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Player Stats (Leaderboard)</h5>
-            </div>
-            <div class="card-body">
-                <p class="text-muted small">Update goals, assists, and MOM awards. These will be added to the player's existing tally.</p>
-                <form method="POST">
-                    <?= csrf_field() ?>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Select Player</label>
-                        <select name="user_id" class="form-select" required>
-                            <option value="">-- Choose Player --</option>
-                            <?php foreach ($users as $u): ?>
-                                <option value="<?= $u['id'] ?>"><?= escape($u['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Add Goals</label>
-                            <input type="number" name="goals" class="form-control" value="0" min="0">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Add Assists</label>
-                            <input type="number" name="assists" class="form-control" value="0" min="0">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Add MOM</label>
-                            <input type="number" name="mvp_awards" class="form-control" value="0" min="0">
-                        </div>
-                    </div>
-                    <button type="submit" name="update_stats" class="btn btn-success w-100"><i class="bi bi-upload"></i> Update Player Stats</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-<?php
-$content = ob_get_clean();
-include(__DIR__ . '/../portal/layout.php');
-?>
+<div class="d-flex justify-content-between flex-wrap gap-2 mb-4"><div><h1 class="h2">Sports Admin Dashboard</h1><p class="text-muted">Sports Ministry operations and safeguarding.</p></div><a class="btn btn-outline-success align-self-start" href="<?=BASE_PATH?>/sports.php">Public page</a></div><?php if($flash):?><div class="alert alert-<?=escape($flash[0])?>"><?=escape($flash[1])?></div><?php endif?>
+<div class="row g-3 mb-4"><?php foreach(['pending'=>'Pending applications','approved'=>'Active players','suspended'=>'Suspended players','rejected'=>'Rejected applications'] as $key=>$label):?><div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="display-6"><?=(int)($counts[$key]??0)?></div><div><?=escape($label)?></div></div></div></div><?php endforeach?></div>
+<?php if($isSuper):?><section class="card mb-4"><div class="card-header"><h2 class="h5 mb-0">Sports Admin appointments</h2></div><div class="card-body"><form method="post" class="row g-2"><?=csrf_field()?><input type="hidden" name="action" value="appoint_sports_admin"><div class="col-md-5"><select name="user_id" class="form-select" required><option value="">Select member</option><?php foreach($users as $u):?><option value="<?=(int)$u['id']?>"><?=escape($u['name'])?></option><?php endforeach?></select></div><div class="col-md-5"><input name="note" class="form-control" maxlength="1000" placeholder="Appointment note"></div><div class="col-md-2"><button class="btn btn-primary w-100">Appoint</button></div></form><?php foreach($admins as $a):?><div class="d-flex justify-content-between align-items-center border-top mt-3 pt-3"><span><?=escape($a['name'])?></span><form method="post"><?=csrf_field()?><input type="hidden" name="action" value="end_sports_admin"><input type="hidden" name="user_id" value="<?=(int)$a['user_id']?>"><input type="hidden" name="note" value="Appointment ended by super admin"><button class="btn btn-sm btn-outline-danger">End appointment</button></form></div><?php endforeach?></div></section><?php endif?>
+<section class="card mb-4"><div class="card-header"><h2 class="h5 mb-0">Applications</h2></div><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Applicant</th><th>Safe overview</th><th>Status</th><th>Decision</th></tr></thead><tbody><?php foreach($apps as $a):?><tr><td><?=escape($a['name'])?><small class="d-block text-muted"><?=escape(date('j M Y',strtotime($a['submitted_at'])))?></small></td><td><?=escape(admin_label($a['primary_position']))?> · #<?=(int)$a['preferred_jersey_number']?> · <?=sports_age($a['date_of_birth'])?> yrs<?php if(sports_age($a['date_of_birth'])<18):?><span class="badge text-bg-warning ms-1">Minor · guardian <?= $a['guardian_consent_at']?'confirmed':'missing'?></span><?php endif?></td><td><span class="badge text-bg-secondary"><?=escape($a['status'])?></span></td><td><form method="post" class="d-flex flex-wrap gap-1"><?=csrf_field()?><input type="hidden" name="application_id" value="<?=(int)$a['id']?>"><input name="applicant_message" class="form-control form-control-sm" maxlength="1000" placeholder="Applicant-facing message"><input name="internal_note" class="form-control form-control-sm" maxlength="2000" placeholder="Internal reason/remark"><?php if($a['status']==='pending'):?><button name="action" value="approve_application" class="btn btn-sm btn-success">Approve</button><button name="action" value="reject_application" class="btn btn-sm btn-outline-danger">Reject</button><?php elseif($a['status']==='approved'):?><button name="action" value="suspend_member" class="btn btn-sm btn-outline-danger">Suspend</button><?php elseif($a['status']==='suspended'):?><button name="action" value="reinstate_member" class="btn btn-sm btn-success">Reinstate</button><?php endif?></form></td></tr><?php endforeach?></tbody></table></div></section>
+<section class="card mb-4"><div class="card-header"><h2 class="h5 mb-0">Players, responsibilities and public profiles</h2></div><div class="card-body"><?php foreach($members as $m):?><div class="border rounded p-3 mb-3"><h3 class="h6"><?=escape($m['name'])?> <span class="badge text-bg-secondary"><?=escape($m['membership_status'])?></span></h3><div class="row g-2"><form method="post" class="col-lg-4 d-flex gap-1"><?=csrf_field()?><input type="hidden" name="action" value="update_member"><input type="hidden" name="member_id" value="<?=(int)$m['id']?>"><select name="primary_position" class="form-select form-select-sm"><?php foreach(sports_positions() as $pos):?><option value="<?=escape($pos)?>" <?=$m['primary_position']===$pos?'selected':''?>><?=escape(admin_label($pos))?></option><?php endforeach?></select><input name="jersey" type="number" min="1" max="99" value="<?=escape($m['assigned_jersey_number'])?>" class="form-control form-control-sm" placeholder="#"><button class="btn btn-sm btn-primary">Save</button></form><form method="post" class="col-lg-4 d-flex gap-1"><?=csrf_field()?><input type="hidden" name="action" value="assign_role"><input type="hidden" name="member_id" value="<?=(int)$m['id']?>"><select name="role_code" class="form-select form-select-sm"><?php foreach(sports_role_codes() as $role):?><option value="<?=escape($role)?>"><?=escape(admin_label($role))?></option><?php endforeach?></select><button class="btn btn-sm btn-primary">Assign</button></form><form method="post" class="col-lg-4"><?=csrf_field()?><input type="hidden" name="action" value="publish_profile"><input type="hidden" name="member_id" value="<?=(int)$m['id']?>"><textarea name="biography" class="form-control form-control-sm mb-1" maxlength="5000" placeholder="Reviewed public biography"><?=escape($m['public_biography'])?></textarea><textarea name="achievements" class="form-control form-control-sm mb-1" maxlength="5000" placeholder="Public achievements"><?=escape($m['public_achievements'])?></textarea><label class="form-check"><input class="form-check-input" type="checkbox" name="use_member_photo" value="1"> Use reviewed member photo</label><label class="form-check"><input class="form-check-input" type="checkbox" name="publish" value="1" <?=$m['is_published']?'checked':''?>> Publish reviewed profile</label><button class="btn btn-sm btn-success mt-1">Review and save</button></form></div></div><?php endforeach?></div></section>
+<div class="row g-4"><div class="col-xl-6"><section class="card h-100"><div class="card-header"><h2 class="h5 mb-0">Training sessions</h2></div><div class="card-body"><form method="post" class="row g-2"><?=csrf_field()?><input type="hidden" name="action" value="create_training"><div class="col-12"><input name="title" class="form-control" placeholder="Session title" required></div><div class="col-6"><input type="date" name="training_date" class="form-control" required></div><div class="col-3"><input type="time" name="start_time" class="form-control" required></div><div class="col-3"><input type="time" name="end_time" class="form-control"></div><div class="col-12"><input name="location" class="form-control" placeholder="General location" required></div><div class="col-12"><textarea name="instructions" class="form-control" maxlength="1000" placeholder="Safe preparation instructions"></textarea></div><div class="col-12"><label><input type="checkbox" name="is_public" value="1"> Public listing</label><button class="btn btn-primary float-end">Create</button></div></form></div></section></div>
+<div class="col-xl-6"><section class="card h-100"><div class="card-header"><h2 class="h5 mb-0">Fixtures</h2></div><div class="card-body"><form method="post" class="row g-2"><?=csrf_field()?><input type="hidden" name="action" value="create_fixture"><div class="col-6"><input name="team_a" class="form-control" placeholder="Team A" required></div><div class="col-6"><input name="team_b" class="form-control" placeholder="Team B" required></div><div class="col-12"><input type="datetime-local" name="start_time" class="form-control" required></div><div class="col-6"><input name="competition_type" class="form-control" placeholder="Competition/type"></div><div class="col-6"><input name="venue" class="form-control" placeholder="Venue"></div><div class="col-6"><select name="location_type" class="form-select"><option value="home">Home</option><option value="away">Away</option><option value="neutral">Neutral</option></select></div><div class="col-6"><label><input type="checkbox" name="is_public" value="1" checked> Public</label><button class="btn btn-primary float-end">Create</button></div></form><hr><?php foreach($matches as $m):?><form method="post" class="row g-1 align-items-center mb-2"><?=csrf_field()?><input type="hidden" name="match_id" value="<?=(int)$m['id']?>"><div class="col"><small><?=escape($m['team_a'])?> vs <?=escape($m['team_b'])?></small></div><div class="col-2"><input type="number" min="0" max="99" name="team_a_score" class="form-control form-control-sm" required></div><div class="col-2"><input type="number" min="0" max="99" name="team_b_score" class="form-control form-control-sm" required></div><div class="col-auto"><button name="action" value="update_result" class="btn btn-sm btn-success">Result</button></div></form><?php endforeach?></div></section></div></div></div>
+<section class="card mt-4"><div class="card-header"><h2 class="h5 mb-0">Training attendance</h2></div><div class="card-body"><form method="post" class="row g-2"><?=csrf_field()?><input type="hidden" name="action" value="record_attendance"><div class="col-md-3"><select name="training_id" class="form-select" required><?php foreach($sessions as $s):?><option value="<?=(int)$s['id']?>"><?=escape($s['title'].' · '.$s['training_date'])?></option><?php endforeach?></select></div><div class="col-md-3"><select name="member_id" class="form-select" required><?php foreach($members as $m):?><option value="<?=(int)$m['id']?>"><?=escape($m['name'])?></option><?php endforeach?></select></div><div class="col-md-2"><select name="attendance_status" class="form-select"><?php foreach(['not_recorded','present','absent','excused','late'] as $v):?><option value="<?=$v?>"><?=escape(admin_label($v))?></option><?php endforeach?></select></div><div class="col-md-3"><input name="remark" class="form-control" maxlength="500" placeholder="Internal remark"></div><div class="col-md-1"><button class="btn btn-primary">Save</button></div></form></div></section>
+<div class="row g-4 mt-1"><div class="col-lg-6"><section class="card h-100"><div class="card-header"><h2 class="h5 mb-0">Announcements</h2></div><div class="card-body"><form method="post"><?=csrf_field()?><input type="hidden" name="action" value="create_announcement"><input name="title" class="form-control mb-2" placeholder="Title" required><textarea name="content" class="form-control mb-2" rows="8" placeholder="Write the full announcement" required></textarea><input type="datetime-local" name="expires_at" class="form-control mb-2"><label><input type="checkbox" name="is_public" value="1"> Public</label><button class="btn btn-primary float-end">Publish</button></form></div></section></div><div class="col-lg-6"><section class="card h-100"><div class="card-header"><h2 class="h5 mb-0">Player statistics</h2></div><div class="card-body"><form method="post"><?=csrf_field()?><input type="hidden" name="action" value="update_stats"><select name="user_id" class="form-select mb-2"><?php foreach($members as $m):?><option value="<?=(int)$m['user_id']?>"><?=escape($m['name'])?></option><?php endforeach?></select><div class="row g-1"><?php foreach(['appearances','starts','goals_scored','assists','clean_sheets','yellow_cards','red_cards','mvp_awards'] as $stat):?><div class="col-6"><label class="small"><?=escape(admin_label($stat))?><input type="number" min="0" name="<?=$stat?>" value="0" class="form-control form-control-sm"></label></div><?php endforeach?></div><button class="btn btn-primary mt-2">Save statistics</button></form></div></section></div></div>
+<section class="card mt-4"><div class="card-header"><h2 class="h5 mb-0">Operations and publication controls</h2></div><div class="card-body"><div class="row g-4"><div class="col-lg-6"><h3 class="h6">Appointments</h3><?php foreach($rolesActive as $role):?><form method="post" class="d-flex justify-content-between border-bottom py-2"><?=csrf_field()?><input type="hidden" name="action" value="end_role"><input type="hidden" name="role_id" value="<?=(int)$role['id']?>"><small><?=escape($role['name'].' · '.admin_label($role['role_code']))?></small><button class="btn btn-sm btn-outline-danger">End</button></form><?php endforeach?></div><div class="col-lg-6"><h3 class="h6">Announcements</h3><?php foreach($announcementRows as $row):?><form method="post" class="d-flex gap-2 border-bottom py-2"><?=csrf_field()?><input type="hidden" name="action" value="announcement_visibility"><input type="hidden" name="announcement_id" value="<?=(int)$row['id']?>"><small class="flex-grow-1"><?=escape($row['title'])?></small><label class="small"><input type="checkbox" name="publish" value="1" <?=$row['is_public']?'checked':''?>> Public</label><button class="btn btn-sm btn-primary">Save</button></form><?php endforeach?></div></div></div></section>
+<section class="card mt-4"><div class="card-header"><h2 class="h5 mb-0">Audit history</h2></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th></tr></thead><tbody><?php foreach($audits as $log):?><tr><td><?=escape($log['created_at'])?></td><td><?=escape($log['actor_name']??'Former user')?></td><td><?=escape(admin_label($log['action']))?></td><td><?=escape(admin_label($log['entity_type']))?></td></tr><?php endforeach?></tbody></table></div></section>
+<?php $content=ob_get_clean();include dirname(__DIR__).'/portal/layout.php';

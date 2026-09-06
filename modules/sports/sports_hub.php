@@ -1,262 +1,44 @@
 <?php
-require_once dirname(__FILE__) . '/../../core/db_connect.php';
-require_once dirname(__FILE__) . '/../../core/sports_schema.php';
+require_once dirname(__DIR__,2).'/core/db_connect.php';
+require_once dirname(__DIR__,2).'/core/sports_service.php';
 
-if (empty($_SESSION['user_role'])) {
-    header('Location: login.php');
-    exit;
-}
-$userRole = $_SESSION['user_role'] ?? 'member';
-
-try {
-    ensure_sports_schema($pdo);
-} catch (Throwable $e) {
-    error_log('sports_hub schema setup: ' . $e->getMessage());
-    $sportsError = 'Sports information is temporarily unavailable. Please try again later.';
-}
-
-// Handle Live Match Feed AJAX Requests
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'commentary') {
-    header('Content-Type: application/json');
-    if (!empty($sportsError)) {
-        echo json_encode(['status' => 'error', 'message' => $sportsError]);
-        exit;
-    }
-    $lastId = (int)($_GET['last_id'] ?? 0);
-    $matchId = (int)($_GET['match_id'] ?? 0);
-    
-    $stmt = $pdo->prepare("SELECT id, comment_text, DATE_FORMAT(created_at, '%H:%i') as time_str FROM sports_commentary WHERE match_id = ? AND id > ? ORDER BY id ASC LIMIT 20");
-    $stmt->execute([$matchId, $lastId]);
-    echo json_encode(['status' => 'success', 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+$missingSportsSchema = sports_public_schema_missing($pdo);
+if ($missingSportsSchema) {
+    error_log('[sports_hub] Incomplete Sports Ministry schema: ' . implode(', ', $missingSportsSchema));
+    http_response_code(503);
+    header('Retry-After: 3600');
+    ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sports Ministry maintenance | JDM Kenya</title><style>body{font-family:system-ui,sans-serif;background:#f5f7fa;color:#20242a;margin:0}.notice{max-width:680px;margin:10vh auto;padding:2rem;background:#fff;border:1px solid #dde3ea;border-radius:12px;box-shadow:0 8px 30px #0001}a{color:#1769aa}</style></head><body><main class="notice"><h1>Sports Ministry is being updated</h1><p>This section is temporarily unavailable while an administrator completes the database update. Please try again shortly.</p><p><a href="<?=escape((BASE_PATH ?: '').'/')?>">Return to JDM Kenya</a></p></main></body></html><?php
     exit;
 }
 
-// Fetch Leaderboard (Top 5 Goal Scorers & MVPs)
-$leaderboard = [];
-$currentMatch = null;
+$viewerId=(int)($_SESSION['user_id']??0);$joinUrl=BASE_PATH.'/login.php';$joinLabel='Join Sports Ministry';
+if($viewerId>0){$viewerApplication=sports_application_for_user($pdo,$viewerId);if(!$viewerApplication){$joinUrl=BASE_PATH.'/join_sports_ministry.php';}elseif($viewerApplication['status']==='pending'){$joinUrl=BASE_PATH.'/sports_application_status.php';$joinLabel='Application Pending';}elseif($viewerApplication['status']==='approved'){$profile=$pdo->prepare('SELECT p.public_identifier FROM sports_public_profiles p JOIN sports_members m ON m.id=p.sports_member_id WHERE m.user_id=? AND m.membership_status="active" LIMIT 1');$profile->execute([$viewerId]);$identifier=$profile->fetchColumn();$joinUrl=$identifier?BASE_PATH.'/sports_player.php?profile='.rawurlencode($identifier):BASE_PATH.'/sports_application_status.php';$joinLabel='My Sports Ministry';}else{$joinUrl=BASE_PATH.'/sports_application_status.php';$joinLabel='Application Status';}}
 
-if (empty($sportsError)) {
-    try {
-        $leaderboardStmt = $pdo->query("
-            SELECT u.name, u.pfp_path, s.goals_scored, s.assists, s.mvp_awards 
-            FROM sports_stats s 
-            JOIN users u ON s.user_id = u.id 
-            ORDER BY s.goals_scored DESC, s.mvp_awards DESC, s.assists DESC 
-            LIMIT 5
-        ");
-        $leaderboard = $leaderboardStmt ? $leaderboardStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-    } catch (Throwable $e) {
-        $sportsError = 'Sports leaderboard could not be loaded.';
-        error_log('sports_hub leaderboard query: ' . $e->getMessage());
-    }
-
-    try {
-        $matchStmt = $pdo->query("SELECT * FROM sports_matches WHERE status = 'Ongoing' ORDER BY id DESC LIMIT 1");
-        $currentMatch = $matchStmt ? $matchStmt->fetch(PDO::FETCH_ASSOC) : null;
-    } catch (Throwable $e) {
-        $sportsError = 'Sports match feed could not be loaded.';
-        error_log('sports_hub match query: ' . $e->getMessage());
-    }
+if (isset($_GET['ajax']) && $_GET['ajax']==='commentary') {
+    header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: no-store');
+    if (!check_rate_limit('sports_public_commentary',60,60)) { http_response_code(429); echo json_encode(['status'=>'error']); exit; }
+    $matchId=filter_var($_GET['match_id']??null,FILTER_VALIDATE_INT); $lastId=max(0,(int)($_GET['last_id']??0));
+    if(!$matchId){http_response_code(400);echo json_encode(['status'=>'error']);exit;}
+    $q=$pdo->prepare("SELECT id,comment_text,DATE_FORMAT(created_at,'%H:%i') time_str FROM sports_commentary WHERE match_id=? AND id>? ORDER BY id LIMIT 20");$q->execute([$matchId,$lastId]);
+    echo json_encode(['status'=>'success','data'=>$q->fetchAll(PDO::FETCH_ASSOC)],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT);exit;
 }
-
-// Initial commentary if a match is ongoing
-$initialCommentary = [];
-if ($currentMatch) {
-    try {
-        $stmt = $pdo->prepare("SELECT id, comment_text, DATE_FORMAT(created_at, '%H:%i') as time_str FROM sports_commentary WHERE match_id = ? ORDER BY id DESC LIMIT 10");
-        $stmt->execute([$currentMatch['id']]);
-        $initialCommentary = array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) {
-        $sportsError = 'Sports commentary could not be loaded.';
-        error_log('sports_hub commentary query: ' . $e->getMessage());
-    }
-}
-
-$page_title = "Sports Ministry Dashboard - JDM Kenya";
-ob_start();
+$upcoming=$pdo->query("SELECT id,team_a,team_b,status,start_time,match_type,competition_type,venue,location_type,team_a_score,team_b_score FROM sports_matches WHERE is_public=1 AND status IN ('Scheduled','Ongoing') ORDER BY start_time LIMIT 12")->fetchAll();
+$results=$pdo->query("SELECT team_a,team_b,start_time,match_type,competition_type,venue,team_a_score,team_b_score FROM sports_matches WHERE is_public=1 AND status='Completed' ORDER BY start_time DESC LIMIT 12")->fetchAll();
+$training=$pdo->query("SELECT title,training_date,start_time,end_time,location,instructions FROM sports_training_sessions WHERE is_public=1 AND status='scheduled' AND training_date>=CURDATE() ORDER BY training_date,start_time LIMIT 10")->fetchAll();
+$announcements=$pdo->query("SELECT title,content,published_at FROM sports_announcements WHERE is_public=1 AND status='published' AND published_at<=NOW() AND (expires_at IS NULL OR expires_at>NOW()) ORDER BY published_at DESC LIMIT 8")->fetchAll();
+$players=$pdo->query("SELECT p.public_identifier,u.name,a.date_of_birth,a.general_estate,a.education_level,m.primary_position,m.assigned_jersey_number,p.profile_photo_path,COALESCE(s.appearances,0) appearances,COALESCE(s.goals_scored,0) goals,COALESCE(s.assists,0) assists FROM sports_public_profiles p JOIN sports_members m ON m.id=p.sports_member_id AND m.membership_status='active' JOIN sports_applications a ON a.id=m.application_id AND a.status='approved' JOIN users u ON u.id=m.user_id LEFT JOIN sports_stats s ON s.user_id=u.id WHERE p.is_published=1 AND p.reviewed_at IS NOT NULL AND a.publication_acknowledged_at IS NOT NULL AND (TIMESTAMPDIFF(YEAR,a.date_of_birth,CURDATE())>=18 OR a.guardian_consent_at IS NOT NULL) ORDER BY u.name LIMIT 60")->fetchAll();
+$roles=$pdo->query("SELECT r.role_code,u.name FROM sports_role_assignments r JOIN sports_members m ON m.id=r.sports_member_id AND m.membership_status='active' JOIN users u ON u.id=m.user_id WHERE r.status='active' AND r.role_code<>'player' ORDER BY FIELD(r.role_code,'captain','assistant_captain','head_coach','assistant_coach'),u.name")->fetchAll();
+$currentMatch=null;$initial=[];foreach($upcoming as $match)if($match['status']==='Ongoing'){$currentMatch=$match;break;}if($currentMatch){$q=$pdo->prepare("SELECT id,comment_text,DATE_FORMAT(created_at,'%H:%i') time_str FROM sports_commentary WHERE match_id=? ORDER BY id DESC LIMIT 10");$q->execute([$currentMatch['id']]);$initial=array_reverse($q->fetchAll());}
+function sport_label(string $v):string{return ucwords(str_replace('_',' ',$v));}
 ?>
-
-<!-- Hero Section -->
-<div class="row mb-4 position-relative rounded-4 overflow-hidden shadow-sm" style="height: 250px; background: #000;">
-    <img src="<?= BASE_PATH ?>/images/african-football.jpg" class="position-absolute w-100 h-100" style="object-fit: cover; opacity: 0.6; z-index: 0;" alt="Football match in Africa">
-    <div class="position-absolute w-100 h-100 d-flex flex-column justify-content-center px-4" style="z-index: 1;">
-        <h2 class="text-white fw-bold display-5 mb-0">Sports Ministry</h2>
-        <p class="text-light lead">Connecting disciples through faith, fitness, and fellowship.</p>
-        <?php if (($userRole ?? '') === 'admin' || ($userRole ?? '') === 'super_admin'): ?>
-            <div class="mt-3">
-                <a href="<?= BASE_PATH ?>/sports_admin.php" class="btn btn-warning btn-neon"><i class="bi bi-gear-fill"></i> Admin Panel</a>
-            </div>
-        <?php endif; ?>
-    </div>
-</div>
-
-<div class="row g-4">
-    <?php if (!empty($sportsError)): ?>
-        <div class="col-12">
-            <div class="alert alert-warning" role="alert">
-                <i class="bi bi-exclamation-triangle"></i> <?= escape($sportsError) ?>
-            </div>
-        </div>
-    <?php endif; ?>
-
-    <!-- Live Match Feed UI -->
-    <div class="col-lg-8">
-        <div class="card border-0 shadow-sm rounded-4 h-100" style="border: 1px solid rgba(0,0,0,0.05) !important;">
-            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-broadcast text-danger"></i> Live Match Feed</h5>
-            </div>
-            <div class="card-body">
-                <?php if ($currentMatch): ?>
-                    <div class="d-flex justify-content-between align-items-center mb-4 p-3 rounded-3" style="background: #f8f9fa;">
-                        <h4 class="mb-0 text-dark fw-bold"><?= escape($currentMatch['team_a']) ?></h4>
-                        <span class="badge bg-danger px-3 py-2 fs-6">VS</span>
-                        <h4 class="mb-0 text-dark fw-bold"><?= escape($currentMatch['team_b']) ?></h4>
-                    </div>
-                    
-                    <div id="commentary-container" class="position-relative" style="height: 350px; overflow-y: auto; scroll-behavior: smooth;">
-                        <?php if (empty($initialCommentary)): ?>
-                            <div class="text-center text-muted mt-5" id="no-comments-msg">Waiting for kick-off...</div>
-                        <?php else: ?>
-                            <?php foreach ($initialCommentary as $comment): ?>
-                                <div class="commentary-item mb-3 p-3 rounded-3 border-start border-4 border-success bg-white shadow-sm" data-id="<?= $comment['id'] ?>" style="transition: all 0.3s ease;">
-                                    <span class="fw-bold text-success me-2"><?= escape($comment['time_str']) ?>'</span>
-                                    <span class="text-dark"><?= escape($comment['comment_text']) ?></span>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
-                <?php else: ?>
-                    <div class="text-center py-5 text-muted">
-                        <i class="bi bi-calendar-x display-4 mb-3"></i>
-                        <h5>No ongoing matches</h5>
-                        <p>Check the schedule for upcoming games.</p>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-
-    <!-- Player Stats Grid (Leaderboard) -->
-    <div class="col-lg-4">
-        <div class="card border-0 shadow-sm rounded-4 h-100" style="border: 1px solid rgba(0,0,0,0.05) !important;">
-            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-trophy text-warning"></i> Leaderboard</h5>
-            </div>
-            <div class="card-body">
-                <ul class="nav nav-pills mb-3 nav-fill" id="pills-tab" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active rounded-pill px-4" style="background-color: #2C5EAD;" id="pills-goals-tab" data-bs-toggle="pill" data-bs-target="#pills-goals" type="button" role="tab" aria-selected="true">Top Scorers</button>
-                    </li>
-                </ul>
-                <div class="tab-content" id="pills-tabContent">
-                    <div class="tab-pane fade show active" id="pills-goals" role="tabpanel" aria-labelledby="pills-goals-tab">
-                        <?php if (empty($leaderboard)): ?>
-                            <p class="text-muted text-center mt-4">No player stats recorded yet.</p>
-                        <?php else: ?>
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle border" style="border-radius: 8px; overflow: hidden;">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="text-center" style="width: 40px;">#</th>
-                                            <th>Player</th>
-                                            <th class="text-center">⚽</th>
-                                            <th class="text-center">🏅</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($leaderboard as $index => $player): ?>
-                                            <tr>
-                                                <td class="text-center fw-bold text-muted"><?= $index + 1 ?></td>
-                                                <td>
-                                                    <div class="d-flex align-items-center">
-                                                        <?php if (!empty($player['pfp_path'])): ?>
-                                                            <img src="<?= escape($player['pfp_path']) ?>" class="rounded-circle me-2" style="width: 30px; height: 30px; object-fit: cover;" alt="Player">
-                                                        <?php else: ?>
-                                                            <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center text-white" style="width: 30px; height: 30px; font-size: 12px;">
-                                                                <?= strtoupper(substr($player['name'], 0, 1)) ?>
-                                                            </div>
-                                                        <?php endif; ?>
-                                                        <span class="fw-semibold text-dark text-truncate" style="max-width: 100px;"><?= escape($player['name']) ?></span>
-                                                    </div>
-                                                </td>
-                                                <td class="text-center fw-bold text-success"><?= (int)$player['goals_scored'] ?></td>
-                                                <td class="text-center text-warning"><?= (int)$player['mvp_awards'] ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<?php if ($currentMatch): ?>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const container = document.getElementById('commentary-container');
-    const matchId = <?= (int)$currentMatch['id'] ?>;
-    let lastId = 0;
-    
-    // Find the max ID currently loaded
-    const items = container.querySelectorAll('.commentary-item');
-    if (items.length > 0) {
-        lastId = parseInt(items[items.length - 1].getAttribute('data-id'), 10);
-    }
-    
-    // Auto-scroll to bottom
-    container.scrollTop = container.scrollHeight;
-
-    // Polling interval for live commentary (updates without page refresh)
-    setInterval(() => {
-        fetch(`sports.php?ajax=commentary&match_id=${matchId}&last_id=${lastId}`)
-            .then(response => response.json())
-            .then(res => {
-                if (res.status === 'success' && res.data.length > 0) {
-                    const noCommentsMsg = document.getElementById('no-comments-msg');
-                    if (noCommentsMsg) noCommentsMsg.remove();
-                    
-                    res.data.forEach(comment => {
-                        const div = document.createElement('div');
-                        div.className = 'commentary-item mb-3 p-3 rounded-3 border-start border-4 border-success bg-white shadow-sm';
-                        div.setAttribute('data-id', comment.id);
-                        // Start invisible for slide-in animation
-                        div.style.opacity = '0';
-                        div.style.transform = 'translateY(20px)';
-                        div.style.transition = 'all 0.4s ease-out';
-                        
-                        div.innerHTML = `<span class="fw-bold text-success me-2">${escapeHtml(comment.time_str)}'</span>
-                                         <span class="text-dark">${escapeHtml(comment.comment_text)}</span>`;
-                        
-                        container.appendChild(div);
-                        
-                        // Trigger reflow and animate in
-                        void div.offsetWidth;
-                        div.style.opacity = '1';
-                        div.style.transform = 'translateY(0)';
-                        
-                        lastId = Math.max(lastId, parseInt(comment.id, 10));
-                    });
-                    
-                    // Smooth scroll to bottom
-                    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-                }
-            })
-            .catch(error => console.error('Error fetching commentary:', error));
-    }, 5000); // Check every 5 seconds
-    
-    function escapeHtml(unsafe) {
-        return (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    }
-});
-</script>
-<?php endif; ?>
-
-<?php
-$content = ob_get_clean();
-// Integrate with the main layout template
-include(__DIR__ . '/../portal/layout.php');
-?>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="JDM Kenya Sports Ministry: training, fixtures, results and approved player profiles."><title>Sports Ministry | JDM Kenya</title><link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet"><link rel="stylesheet" href="<?=BASE_PATH?>/assets/css/sports.css"></head><body>
+<a class="visually-hidden-focusable" href="#main">Skip to content</a><nav class="navbar navbar-expand-md navbar-dark bg-dark"><div class="container"><a class="navbar-brand" href="<?=BASE_PATH?>/">JDM Kenya</a><button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button><div id="nav" class="collapse navbar-collapse"><div class="navbar-nav ms-auto"><a class="nav-link active" href="<?=BASE_PATH?>/sports.php">Sports Ministry</a><?php if(empty($_SESSION['user_id'])):?><a class="nav-link" href="<?=BASE_PATH?>/signup.php">Join</a><a class="nav-link" href="<?=BASE_PATH?>/login.php">Login</a><?php else:?><a class="nav-link" href="<?=BASE_PATH?>/member_dashboard.php">Dashboard</a><?php if(sports_can_admin($pdo,(int)$_SESSION['user_id'])):?><a class="nav-link" href="<?=BASE_PATH?>/sports_admin.php">Sports Admin</a><?php endif?><?php endif?></div></div></div></nav>
+<header class="sports-hero text-white"><div class="container py-5"><div class="col-lg-7 py-5"><p class="text-uppercase fw-semibold">Faith · Fitness · Fellowship</p><h1 class="display-4 fw-bold">Sports Ministry</h1><p class="lead">Developing character, discipleship and sporting talent in a safe, accountable community.</p><a class="btn btn-warning btn-lg" href="<?=escape($joinUrl)?>"><?=escape($joinLabel)?></a><?php if(!$viewerId):?><a class="btn btn-outline-light btn-lg ms-2" href="<?=BASE_PATH?>/signup.php">Create JDM account</a><?php endif?></div></div></header>
+<main id="main" class="container py-5"><section class="mb-5"><h2>Mission and purpose</h2><p>We use football to nurture discipline, teamwork, wellbeing and Christ-centred leadership while creating pathways for players to grow and serve their communities.</p><a class="btn btn-outline-success" href="<?=BASE_PATH?>/sports_rules.php">Read the Sports Ministry rules</a></section>
+<section class="mb-5"><h2>Training schedule</h2><div class="row g-3"><?php if(!$training):?><p class="text-muted">Public training sessions will appear here.</p><?php endif?><?php foreach($training as $t):?><div class="col-md-6"><article class="card h-100"><div class="card-body"><h3 class="h5"><?=escape($t['title'])?></h3><p class="mb-1"><?=escape(date('D, j M Y',strtotime($t['training_date'])))?> · <?=escape(date('H:i',strtotime($t['start_time'])))?></p><p class="mb-1"><strong>Location:</strong> <?=escape($t['location'])?></p><?php if($t['instructions']):?><p class="text-muted mb-0"><?=escape($t['instructions'])?></p><?php endif?></div></article></div><?php endforeach?></div></section>
+<section class="mb-5"><h2>Fixtures and results</h2><div class="row g-4"><div class="col-lg-6"><h3 class="h5">Upcoming</h3><?php foreach($upcoming as $m):?><div class="border rounded p-3 mb-2"><strong><?=escape($m['team_a'])?> vs <?=escape($m['team_b'])?></strong><div><?=escape(date('j M Y, H:i',strtotime($m['start_time'])))?><?= $m['venue']?' · '.escape($m['venue']):''?></div></div><?php endforeach?><?php if(!$upcoming):?><p class="text-muted">No upcoming public fixtures.</p><?php endif?></div><div class="col-lg-6"><h3 class="h5">Results</h3><?php foreach($results as $m):?><div class="border rounded p-3 mb-2"><strong><?=escape($m['team_a'])?> <?=is_null($m['team_a_score'])?'–':(int)$m['team_a_score']?> : <?=is_null($m['team_b_score'])?'–':(int)$m['team_b_score']?> <?=escape($m['team_b'])?></strong><div><?=escape(date('j M Y',strtotime($m['start_time'])))?></div></div><?php endforeach?><?php if(!$results):?><p class="text-muted">No published results.</p><?php endif?></div></div></section>
+<?php if($currentMatch):?><section class="mb-5"><h2>Live commentary</h2><div id="commentary" class="border rounded p-3" data-match="<?=(int)$currentMatch['id']?>"><?php foreach($initial as $c):?><p data-id="<?=(int)$c['id']?>"><strong><?=escape($c['time_str'])?>'</strong> <?=escape($c['comment_text'])?></p><?php endforeach?></div></section><?php endif?>
+<section class="mb-5"><h2>Announcements</h2><?php foreach($announcements as $a):?><article class="mb-3"><h3 class="h5"><?=escape($a['title'])?></h3><p><?=nl2br(escape($a['content']))?></p></article><?php endforeach?><?php if(!$announcements):?><p class="text-muted">No public announcements.</p><?php endif?></section>
+<section class="mb-5"><h2>Team leadership and management</h2><div class="row g-2"><?php foreach($roles as $r):?><div class="col-sm-6 col-lg-4"><div class="border rounded p-3"><strong><?=escape(sport_label($r['role_code']))?></strong><br><?=escape($r['name'])?></div></div><?php endforeach?></div><?php if(!$roles):?><p class="text-muted">Appointments will appear after review.</p><?php endif?></section>
+<section class="mb-5"><h2>Approved player roster</h2><div class="row g-3"><?php foreach($players as $p):?><div class="col-12 col-sm-6 col-lg-4"><article class="card h-100"><div class="card-body"><h3 class="h5"><?=escape($p['name'])?></h3><p class="mb-1">Age <?=sports_age($p['date_of_birth'])?> · <?=escape($p['general_estate'])?></p><p class="mb-2"><?=escape(sport_label($p['primary_position']))?><?= $p['assigned_jersey_number']?' · #'.(int)$p['assigned_jersey_number']:''?></p><p class="small text-muted"><?= (int)$p['appearances']?> appearances · <?= (int)$p['goals']?> goals · <?= (int)$p['assists']?> assists</p><a class="stretched-link" href="<?=BASE_PATH?>/sports_player.php?profile=<?=escape($p['public_identifier'])?>">View profile</a></div></article></div><?php endforeach?></div><?php if(!$players):?><p class="text-muted">No reviewed public player profiles yet.</p><?php endif?></section>
+</main><footer class="bg-dark text-white py-4"><div class="container">&copy; <?=date('Y')?> JDM Kenya · Sports Ministry</div></footer><script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script><?php if($currentMatch):?><script src="<?=BASE_PATH?>/assets/js/sports_public.js" defer></script><?php endif?></body></html>

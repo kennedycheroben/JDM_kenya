@@ -1,7 +1,14 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../vendor/autoload.php';
 
 if (isset($_SESSION['user_role'])) {
+    $pendingAuthorizationUrl = \Jdm\OAuth\Support\PendingAuthorization::consumeUrl(BASE_PATH);
+    if ($pendingAuthorizationUrl !== null) {
+        header('Location: ' . $pendingAuthorizationUrl);
+        exit;
+    }
+
     header('Location: index.php');
     exit;
 }
@@ -21,11 +28,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if ($email === '' || $password === '') {
         $error = 'Please enter both email and password.';
     } else {
-        $stmt = $pdo->prepare('SELECT * FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id,name,email,password,role,category,is_approved,is_gbs_leader,account_status FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($password, $user['password'])) {
+            if ($user['account_status'] !== 'active') {
+                $error = 'This account is not available. Please contact JDM Kenya support.';
+            } else {
             // =====================================================================
             // APPROVAL CHECK
             // =====================================================================
@@ -45,6 +55,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $_SESSION['user_role'] = $user['role'];
                 $_SESSION['is_gbs_leader'] = $user['is_gbs_leader'] ?? 0;
 
+                $pendingAuthorizationUrl = \Jdm\OAuth\Support\PendingAuthorization::consumeUrl(BASE_PATH);
+                if ($pendingAuthorizationUrl !== null) {
+                    header('Location: ' . $pendingAuthorizationUrl);
+                    exit;
+                }
+
+                if ($user['category'] === 'sports_ministry') {
+                    header('Location: sports_application_status.php');
+                    exit;
+                }
+
                 // Route to appropriate dashboard based on role
                 if ($user['role'] === 'super_admin') {
                     header('Location: super_admin_dashboard.php');
@@ -57,6 +78,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
                 header('Location: member_dashboard.php');
                 exit;
+            }
             }
         } else {
             $error = 'Invalid email or password. Please try again.';
@@ -81,9 +103,7 @@ if ($registration_pending) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JDM Kenya | Sign In</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="<?= BASE_PATH ?>/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/style.css">
 </head>
 <body class="auth-page">
@@ -100,25 +120,25 @@ if ($registration_pending) {
                         <div class="recovery-card-body">
                             <?php if ($success): ?>
                                 <div class="alert alert-success alert-dismissible fade show">
-                                    <i class="fas fa-check-circle"></i> <?= escape($success) ?>
+                                    <span aria-hidden="true">✓</span> <?= escape($success) ?>
                                     <button class="btn-close" data-bs-dismiss="alert"></button>
                                 </div>
                             <?php endif; ?>
                             <?php if ($error): ?>
                                 <div class="alert alert-danger alert-dismissible fade show">
-                                    <i class="fas fa-exclamation-circle"></i> <?= escape($error) ?>
+                                    <span aria-hidden="true">!</span> <?= escape($error) ?>
                                     <button class="btn-close" data-bs-dismiss="alert"></button>
                                 </div>
                             <?php endif; ?>
                             <form method="post" novalidate>
                                 <?= csrf_field() ?>
                                 <div class="auth-floating-group">
-                                    <input type="email" name="email" class="form-control auth-floating-input" placeholder=" " value="" required>
-                                    <label class="auth-floating-label">Email address</label>
+                                    <input id="login_email" type="email" name="email" class="form-control auth-floating-input" placeholder=" " value="" autocomplete="username" required>
+                                    <label class="auth-floating-label" for="login_email">Email address</label>
                                 </div>
                                 <div class="auth-floating-group">
-                                    <input type="password" name="password" class="form-control auth-floating-input" placeholder=" " required>
-                                    <label class="auth-floating-label">Password</label>
+                                    <input id="login_password" type="password" name="password" class="form-control auth-floating-input" placeholder=" " autocomplete="current-password" required>
+                                    <label class="auth-floating-label" for="login_password">Password</label>
                                     <small class="text-muted d-block mt-2">
                                         <a href="forgot_password.php" class="text-decoration-underline small">Forgot your password?</a>
                                     </small>
@@ -132,7 +152,7 @@ if ($registration_pending) {
                     </div>
                 </div>
                 <div class="card-flip-back">
-                    <div class="back-logo"><i class="bi bi-cross"></i></div>
+                    <div class="back-logo" aria-hidden="true">✚</div>
                     <h3>JDM Kenya</h3>
                     <p>Building a discipleship movement with faith, clarity, and service.</p>
                 </div>
@@ -140,23 +160,11 @@ if ($registration_pending) {
         </div>
     </div>
 </div>
-<?php include dirname(__DIR__) . '/public/footer.php'; ?>
-<a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+<?php $skipAnimationScripts = true; include dirname(__DIR__) . '/public/footer.php'; ?>
+<a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center" aria-label="Back to top">↑</a>
 <div id="preloader"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    gsap.set('#loginCardInner', { rotationY: 180 });
-    gsap.to('#loginCardInner', {
-        rotationY: 0,
-        duration: 1.2,
-        ease: 'power4.out',
-        delay: 0.3
-    });
-});
-</script>
+<script src="<?= BASE_PATH ?>/assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <script src="<?= BASE_PATH ?>/assets/js/ui_animations.js"></script>
 </body>
 </html>

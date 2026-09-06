@@ -79,7 +79,9 @@
 </div>
 <?php endif; ?>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-<script src="<?= BASE_PATH ?>/assets/js/lenis.min.js"></script>
-<script src="<?= BASE_PATH ?>/assets/js/animated-scroll.js?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/js/animated-scroll.js') ?>"></script>
+<?php if (empty($skipAnimationScripts)): ?>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="<?= BASE_PATH ?>/assets/js/lenis.min.js"></script>
+    <script src="<?= BASE_PATH ?>/assets/js/animated-scroll.js?v=<?= filemtime(dirname(dirname(__DIR__)) . '/assets/js/animated-scroll.js') ?>"></script>
+<?php endif; ?>

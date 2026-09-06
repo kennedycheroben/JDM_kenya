@@ -7,7 +7,7 @@ if (empty($_SESSION['user_role'])) {
     exit;
 }
 
-$announcements = $pdo->query('SELECT id, title, content, COALESCE(date_created, date_posted) AS date_created FROM announcements ORDER BY COALESCE(date_created, date_posted) DESC')->fetchAll(PDO::FETCH_ASSOC);
+$announcements = $pdo->query('SELECT id, title, content, COALESCE(date_created, date_posted) AS date_created FROM announcements ORDER BY COALESCE(date_created, date_posted) DESC, id DESC')->fetchAll(PDO::FETCH_ASSOC);
 
 ob_start();
 ?>
@@ -24,17 +24,24 @@ ob_start();
 <?php else: ?>
     <div class="accordion" id="burningIssues">
         <?php foreach ($announcements as $i => $a): ?>
-            <div class="accordion-item">
+            <div class="accordion-item announcement-item">
                 <h2 class="accordion-header">
                     <button class="accordion-button <?= $i === 0 ? '' : 'collapsed' ?>" type="button"
                             data-bs-toggle="collapse" data-bs-target="#ann<?= (int)$a['id'] ?>">
-                        <?= escape($a['title']) ?>
+                        <span class="fw-bold"><?= escape($a['title']) ?></span>
                         <span class="ms-2 text-muted small">(<?= date('M d, Y', strtotime($a['date_created'])) ?>)</span>
                     </button>
                 </h2>
                 <div id="ann<?= (int)$a['id'] ?>" class="accordion-collapse collapse <?= $i === 0 ? 'show' : '' ?>" data-bs-parent="#burningIssues">
                     <div class="accordion-body">
-                        <?= nl2br(escape($a['content'])) ?>
+                        <?php if (mb_strlen($a['content']) > 150): ?>
+                            <details class="announcement-toggle">
+                                <summary><span class="announcement-preview fw-normal"><?= escape(mb_substr($a['content'], 0, 150)) ?>&hellip;</span><span class="mt-2 text-primary fw-semibold announcement-more">View more</span><span class="mt-2 text-primary fw-semibold announcement-less">View less</span></summary>
+                                <div class="announcement-full mt-2"><?= nl2br(escape($a['content'])) ?></div>
+                            </details>
+                        <?php else: ?>
+                            <div class="announcement-full"><?= nl2br(escape($a['content'])) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -47,4 +54,3 @@ $content = ob_get_clean();
 $page_title = "Newsroom - JDM Kenya";
 include(__DIR__ . '/layout.php');
 ?>
-

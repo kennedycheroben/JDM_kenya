@@ -17,7 +17,7 @@ if ($userRole === 'admin' || $userRole === 'super_admin') {
     $members = $pdo->query("SELECT id, name, pfp_path FROM users WHERE role IN ('member','admin') AND category NOT IN ('partner', 'missionary') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 }
 $resources = $pdo->query('SELECT id, title, file_path, upload_date FROM resources ORDER BY upload_date DESC')->fetchAll(PDO::FETCH_ASSOC);
-$announcements = $pdo->query('SELECT id, title, content, date_posted FROM announcements ORDER BY date_posted DESC LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
+$announcements = $pdo->query('SELECT id, title, content, COALESCE(date_created, date_posted) AS date_posted FROM announcements ORDER BY COALESCE(date_created, date_posted) DESC, id DESC LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
 $publicPrayers = $pdo->query('SELECT pr.id, pr.message, pr.created_at, pr.privacy_level, pr.is_private, u.name FROM prayer_requests pr INNER JOIN users u ON u.id = pr.user_id WHERE pr.privacy_level IN ("public", "anonymous") OR pr.is_private = 0 ORDER BY pr.created_at DESC LIMIT 30')->fetchAll(PDO::FETCH_ASSOC);
 
 $pfpPath = null;
@@ -268,16 +268,23 @@ if ($userId > 0) {
                             <?php else: ?>
                                 <div class="accordion" id="annAccordion">
                                     <?php foreach (array_slice($announcements, 0, 5) as $idx => $a): ?>
-                                        <div class="accordion-item">
+                                        <div class="accordion-item announcement-item">
                                             <h2 class="accordion-header">
                                                 <button class="accordion-button <?= $idx === 0 ? '' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#ann<?= (int)$a['id'] ?>">
-                                                    <?= escape($a['title']) ?>
+                                                    <span class="fw-bold"><?= escape($a['title']) ?></span>
                                                     <span class="ms-2 text-muted small">(<?= date('M d', strtotime($a['date_posted'])) ?>)</span>
                                                 </button>
                                             </h2>
                                             <div id="ann<?= (int)$a['id'] ?>" class="accordion-collapse collapse <?= $idx === 0 ? 'show' : '' ?>" data-bs-parent="#annAccordion">
                                                 <div class="accordion-body">
-                                                    <?= nl2br(escape($a['content'])) ?>
+                                                    <?php if (mb_strlen($a['content']) > 150): ?>
+                                                        <details class="announcement-toggle">
+                                                            <summary><span class="announcement-preview fw-normal"><?= escape(mb_substr($a['content'], 0, 150)) ?>&hellip;</span><span class="mt-2 text-primary fw-semibold announcement-more">View more</span><span class="mt-2 text-primary fw-semibold announcement-less">View less</span></summary>
+                                                            <div class="announcement-full mt-2"><?= nl2br(escape($a['content'])) ?></div>
+                                                        </details>
+                                                    <?php else: ?>
+                                                        <div class="announcement-full"><?= nl2br(escape($a['content'])) ?></div>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>

@@ -101,10 +101,12 @@ if (isset($_POST['run_migration'])) {
         $pdo->query("CREATE TABLE IF NOT EXISTS announcements (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT,
             title VARCHAR(255) NOT NULL,
-            content TEXT NOT NULL,
+            content LONGTEXT NOT NULL,
             date_created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        // Keep existing installations in sync: LONGTEXT allows full-length announcements.
+        $pdo->exec("ALTER TABLE announcements MODIFY content LONGTEXT NOT NULL");
         $messages[] = 'announcements table ready.';
     } catch (PDOException $e) {
         $messages[] = 'announcements table error: ' . $e->getMessage();

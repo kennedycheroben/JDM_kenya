@@ -81,7 +81,7 @@ if ($selected_category !== 'all') {
     $params[] = $selected_category;
 }
 
-$query .= ' ORDER BY created_at DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
+$query .= ' ORDER BY created_at DESC, id DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
 
 $stmtCount = $pdo->prepare($countQuery);
 $stmtCount->execute($params);
@@ -247,7 +247,7 @@ ob_start();
                         <table class="table table-bordered table-hover">
                             <thead class="table-light">
                                 <tr>
-                                    <th>ID</th>
+                                    <th>No.</th>
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>WhatsApp Phone</th>
@@ -258,9 +258,9 @@ ob_start();
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($members as $member): ?>
+                                <?php foreach ($members as $rowIndex => $member): ?>
                                     <tr>
-                                        <td><strong>#<?= $member['id'] ?></strong></td>
+                                        <td><strong><?= (int)($offset + $rowIndex + 1) ?></strong></td>
                                         <td><?= escape($member['name']) ?></td>
                                         <td><?= $isAdmin ? escape($member['email']) : escape(maskEmail($member['email'] ?? '')) ?></td>
                                         <td><?= $isAdmin ? escape($member['whatsapp_phone']) : escape(maskPhone($member['whatsapp_phone'] ?? '')) ?></td>
@@ -309,11 +309,11 @@ ob_start();
                                             <span class="badge <?= $rb ?>"><?= escape($r) ?></span>
                                         </td>
                                         <td>
-                                                <a href="view_member.php?id=<?= $member['id'] ?>" class="btn btn-sm btn-primary">
+                                                <a href="view_member.php?id=<?= (int)$member['id'] ?>" class="btn btn-sm btn-primary">
                                                     <i class="bi bi-eye"></i> View
                                                 </a>
                                                 <?php if ($is_super_admin): ?>
-                                                    <a href="delete_member.php?id=<?= $member['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this user? This cannot be undone.');">
+                                                    <a href="delete_member.php?id=<?= (int)$member['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this user? This cannot be undone.');">
                                                         <i class="bi bi-trash"></i> Delete
                                                     </a>
                                                 <?php endif; ?>

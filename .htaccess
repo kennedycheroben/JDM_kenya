@@ -1,6 +1,16 @@
 # JDM Kenya Module Redirection Rules
 RewriteEngine On
 
+# JDM OAuth Environment Variables (Local Development)
+SetEnv JDM_OAUTH_ENABLED true
+SetEnv JDM_OAUTH_ISSUER http://127.0.0.1/JDM_kenya
+SetEnv JDM_OAUTH_PRIVATE_KEY_PATH /home/cheroben/jdm-oauth-keys/private.key
+SetEnv JDM_OAUTH_PUBLIC_KEY_PATH /home/cheroben/jdm-oauth-keys/public.key
+SetEnv JDM_OAUTH_ENCRYPTION_KEY 4fFCFHDqU3A9RiknaVgKoBXbCNrheLMHr53Z+Yr4Cxk=
+SetEnv JDM_OAUTH_AUDIT_SALT sjJUBq+ZGnmQE5HhQ0L5q+MNQXP1/r7ozKLfjhfVzAc=
+SetEnv JDM_OAUTH_ALLOW_INSECURE_LOCAL true
+SetEnv JDM_SESSION_COOKIE jdm_kenya_session
+
 # Normalize requests that include a leftover "/JDM_kenya" prefix
 RewriteRule ^JDM_kenya/(.*)$ /$1 [R=301,L,NE]
 RewriteRule ^modules/auth/login\.php$ login.php [R=301,L]
@@ -57,11 +67,18 @@ ServerSignature Off
 <FilesMatch "\.(sql|md|log|env|local\.php)$">
     Require all denied
 </FilesMatch>
-<FilesMatch "^(config\.php|composer\.json|package\.json)$">
+<FilesMatch "^(config\.php|composer\.(json|lock)|package\.json|\.env(\..*)?)$">
     Require all denied
 </FilesMatch>
 
 # Block direct access to tmp/ directory (session files, debug logs)
 <IfModule mod_rewrite.c>
     RewriteRule ^tmp/ - [F,L]
+    RewriteRule ^vendor/ - [F,L]
+    RewriteRule ^oauth/(bin|src|views)/ - [F,L]
 </IfModule>
+
+<FilesMatch "^(config(\.local)?\.php|setup(_local_db)?\.php|test.*\.php)$">
+    Require all denied
+</FilesMatch>
+RedirectMatch 404 ^/(?:\.git|\.agents|\.codex|database|tests?)(?:/|$)
