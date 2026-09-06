@@ -2,4 +2,5 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/xqtrqexj/public_html
-    - /bin/rsync -av --exclude='.git' --exclude='.cpanel.yml' ./ $DEPLOYPATH/
+    - /bin/cp -rf /home/xqtrqexj/repositories/JDM_kenya/* $DEPLOYPATH/
+    - /bin/cp -f /home/xqtrqexj/repositories/JDM_kenya/.htaccess $DEPLOYPATH/ 2>/dev/null || true
