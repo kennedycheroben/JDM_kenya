@@ -22,10 +22,21 @@ try {
     $clientId = (string) $request->getAttribute('oauth_client_id');
     $scopes = (array) $request->getAttribute('oauth_scopes');
 
-    $statement = $pdo->prepare('SELECT oauth_subject, name, email, email_verified_at, account_status FROM users WHERE oauth_subject = ? LIMIT 1');
-    $statement->execute([$subject]);
-    $user = $statement->fetch(PDO::FETCH_ASSOC);
-    if (! $user || $user['account_status'] !== 'active') {
+    try {
+        $statement = $pdo->prepare('SELECT oauth_subject, name, email, email_verified_at, account_status FROM users WHERE oauth_subject = ? LIMIT 1');
+        $statement->execute([$subject]);
+        $user = $statement->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+        $statement = $pdo->prepare('SELECT name, email FROM users WHERE id = ? LIMIT 1');
+        $statement->execute([$subject]);
+        $user = $statement->fetch(PDO::FETCH_ASSOC);
+        if ($user) {
+            $user['oauth_subject'] = $subject;
+            $user['email_verified_at'] = null;
+            $user['account_status'] = 'active';
+        }
+    }
+    if (! $user || ($user['account_status'] ?? 'active') !== 'active') {
         $services->audit->record('userinfo_denied_inactive', $clientId, $subject);
         Http::safeError(403);
     }

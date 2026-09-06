@@ -123,6 +123,9 @@ if (isset($_POST['run_migration'])) {
         ['table' => 'users', 'column' => 'is_staff',       'def' => "TINYINT(1) NOT NULL DEFAULT 0"],
         ['table' => 'users', 'column' => 'staff_type',     'def' => "VARCHAR(50) NULL DEFAULT NULL"],
         ['table' => 'users', 'column' => 'is_gbs_leader',  'def' => "TINYINT(1) NOT NULL DEFAULT 0"],
+        ['table' => 'users', 'column' => 'oauth_subject',   'def' => "CHAR(36) NULL DEFAULT NULL"],
+        ['table' => 'users', 'column' => 'email_verified_at','def' => "DATETIME NULL DEFAULT NULL"],
+        ['table' => 'users', 'column' => 'account_status',  'def' => "ENUM('active','disabled','suspended','deleted') NOT NULL DEFAULT 'active'"],
     ];
 
     foreach ($colChecks as $c) {

@@ -1,6 +1,6 @@
 # Virtual environment
 venv/
-vendor/
+/vendor/
 /.phpunit.cache/
 
 # Python cache

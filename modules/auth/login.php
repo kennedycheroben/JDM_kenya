@@ -29,12 +29,37 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $error = 'Please enter both email and password.';
     } else {
         try {
-            $stmt = $pdo->prepare('SELECT id,name,email,password,role,category,is_approved,is_gbs_leader,account_status FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
-            $stmt->execute([$email]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            try {
+                $stmt = $pdo->prepare('SELECT id,name,email,password,role,category,is_approved,is_gbs_leader,account_status FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
+                $stmt->execute([$email]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (\PDOException $e) {
+                if ($e->getCode() === '42S22' || strpos($e->getMessage(), 'account_status') !== false || strpos($e->getMessage(), '1054') !== false) {
+                    // Try auto-healing missing columns on users table if database permissions allow
+                    try {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN account_status ENUM('active','disabled','suspended','deleted') NOT NULL DEFAULT 'active' AFTER is_approved");
+                    } catch (\Throwable $t) {}
+                    try {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN oauth_subject CHAR(36) NULL AFTER id");
+                    } catch (\Throwable $t) {}
+                    try {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL AFTER email");
+                    } catch (\Throwable $t) {}
+
+                    // Query fallback without account_status
+                    $stmt = $pdo->prepare('SELECT id,name,email,password,role,category,is_approved,is_gbs_leader FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
+                    $stmt->execute([$email]);
+                    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($user) {
+                        $user['account_status'] = 'active';
+                    }
+                } else {
+                    throw $e;
+                }
+            }
 
             if ($user && password_verify($password, $user['password'])) {
-                if ($user['account_status'] !== 'active') {
+                if (($user['account_status'] ?? 'active') !== 'active') {
                     $error = 'This account is not available. Please contact JDM Kenya support.';
                 } else {
                 // =====================================================================

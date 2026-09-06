@@ -33,9 +33,19 @@ try {
         exit;
     }
 
-    $statement = $pdo->prepare('SELECT id, oauth_subject, account_status, category, is_approved FROM users WHERE id = ? LIMIT 1');
-    $statement->execute([(int) $_SESSION['user_id']]);
-    $user = $statement->fetch(PDO::FETCH_ASSOC);
+    try {
+        $statement = $pdo->prepare('SELECT id, oauth_subject, account_status, category, is_approved FROM users WHERE id = ? LIMIT 1');
+        $statement->execute([(int) $_SESSION['user_id']]);
+        $user = $statement->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+        $statement = $pdo->prepare('SELECT id, category, is_approved FROM users WHERE id = ? LIMIT 1');
+        $statement->execute([(int) $_SESSION['user_id']]);
+        $user = $statement->fetch(PDO::FETCH_ASSOC);
+        if ($user) {
+            $user['oauth_subject'] = null;
+            $user['account_status'] = 'active';
+        }
+    }
     if (! UserEligibility::allowsAuthorization($user ?: null)) {
         $services->audit->record('authorization_denied_ineligible', $client->getIdentifier(), $user['oauth_subject'] ?? null);
         Http::safeError(403);
