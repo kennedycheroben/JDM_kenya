@@ -53,11 +53,31 @@ try {
         $perSenderBreakdown[(int)$row['sender_id']] = (int)$row['unread_count'];
     }
 
+    // New Resources
+    $stmt = $pdo->query("SELECT COUNT(*) FROM resources WHERE upload_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+    $newResourcesCount = (int)$stmt->fetchColumn();
+
+    // New Announcements
+    $stmt = $pdo->query("SELECT COUNT(*) FROM announcements WHERE COALESCE(date_created, date_posted) >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+    $newAnnouncementsCount = (int)$stmt->fetchColumn();
+
+    // New Activities
+    $stmt = $pdo->query("SELECT COUNT(*) FROM activities WHERE date >= CURDATE()");
+    $newActivitiesCount = (int)$stmt->fetchColumn();
+
+    // New Bible Study Materials
+    $stmt = $pdo->query("SELECT COUNT(*) FROM bible_study_materials WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND is_published = 1");
+    $newBibleStudyCount = (int)$stmt->fetchColumn();
+
     echo json_encode([
         'ok' => true,
         'unread_count' => $totalCount,
         'recent_sender_name' => $recentSenderName,
         'per_sender_breakdown' => $perSenderBreakdown,
+        'new_resources' => $newResourcesCount,
+        'new_announcements' => $newAnnouncementsCount,
+        'new_activities' => $newActivitiesCount,
+        'new_bible_studies' => $newBibleStudyCount,
     ]);
 } catch (Throwable $e) {
     error_log('check_new_messages error: ' . $e->getMessage());

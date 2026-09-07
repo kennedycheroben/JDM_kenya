@@ -623,7 +623,14 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                                             </td>
                                             <td><?= escape($contactMessage['subject']) ?></td>
                                             <td style="min-width: 280px;">
-                                                <?= nl2br(escape($contactMessage['message'])) ?>
+                                                <details class="announcement-toggle mb-1">
+                                                    <summary>
+                                                        <span class="announcement-preview"><?= escape(mb_substr($contactMessage['message'], 0, 100)) ?>&hellip;</span>
+                                                        <span class="mt-1 text-primary fw-semibold announcement-more">View more</span>
+                                                        <span class="mt-1 text-primary fw-semibold announcement-less">View less</span>
+                                                    </summary>
+                                                    <div class="announcement-full mt-2"><?= nl2br(escape($contactMessage['message'])) ?></div>
+                                                </details>
                                             </td>
                                             <td><?= date('M d, Y H:i', strtotime($contactMessage['created_at'])) ?></td>
                                             <td class="text-end">

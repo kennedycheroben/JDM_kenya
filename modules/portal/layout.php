@@ -615,8 +615,9 @@ if (!isset($page_title)) {
                     </a>
                 </li>
                 <li class="nav-item mb-2">
-                    <a class="nav-link text-white" href="bible_study.php">
-                        <i class="bi bi-book-half"></i> Bible Study
+                    <a class="nav-link text-white d-flex align-items-center justify-content-between" href="bible_study.php">
+                        <span><i class="bi bi-book-half"></i> Bible Study</span>
+                        <span id="nav-badge-bible-study" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
                     </a>
                 </li>
                 <?php if ($is_bible_study_leader): ?>
@@ -668,18 +669,21 @@ if (!isset($page_title)) {
                     </li>
                     <?php endif; ?>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="admin_dashboard.php?tab=activities">
-                            <i class="bi bi-calendar-event"></i> Activities
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="admin_dashboard.php?tab=activities">
+                            <span><i class="bi bi-calendar-event"></i> Activities</span>
+                            <span id="nav-badge-activities" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="admin_dashboard.php?tab=resources">
-                            <i class="bi bi-file-earmark-pdf"></i> Resources
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="admin_dashboard.php?tab=resources">
+                            <span><i class="bi bi-file-earmark-pdf"></i> Resources</span>
+                            <span id="nav-badge-resources" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="admin_dashboard.php?tab=announcements">
-                            <i class="bi bi-megaphone"></i> Newsroom
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="admin_dashboard.php?tab=announcements">
+                            <span><i class="bi bi-megaphone"></i> Newsroom</span>
+                            <span id="nav-badge-announcements" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
@@ -721,18 +725,21 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="news_room.php">
-                            <i class="bi bi-megaphone"></i> Newsroom
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="news_room.php">
+                            <span><i class="bi bi-megaphone"></i> Newsroom</span>
+                            <span id="nav-badge-announcements" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="activities.php">
-                            <i class="bi bi-calendar-event"></i> Activities
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="activities.php">
+                            <span><i class="bi bi-calendar-event"></i> Activities</span>
+                            <span id="nav-badge-activities" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="resources.php">
-                            <i class="bi bi-file-earmark-pdf"></i> Resources
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="resources.php">
+                            <span><i class="bi bi-file-earmark-pdf"></i> Resources</span>
+                            <span id="nav-badge-resources" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
@@ -944,7 +951,6 @@ if (!isset($page_title)) {
             const userId = <?= (int)($_SESSION['user_id'] ?? 0) ?>;
             if (!userId) return;
             const badge = document.getElementById('chatNotifyBadge');
-            if (!badge) return;
 
             // Store global notification state for chat.php to access
             window.unreadNotifications = {
@@ -958,7 +964,7 @@ if (!isset($page_title)) {
                     const data = await res.json();
                     if (!data.ok) {
                         console.error('check_new_messages failed:', data);
-                        badge.classList.add('d-none');
+                        if(badge) badge.classList.add('d-none');
                         return;
                     }
                     const c = parseInt(data.unread_count || 0, 10) || 0;
@@ -971,18 +977,42 @@ if (!isset($page_title)) {
                     window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: {
                         totalCount: c,
                         perSenderBreakdown: data.per_sender_breakdown || {},
-                        recentSenderName: data.recent_sender_name
+                        recentSenderName: data.recent_sender_name,
+                        newResources: data.new_resources || 0,
+                        newAnnouncements: data.new_announcements || 0,
+                        newActivities: data.new_activities || 0,
+                        newBibleStudies: data.new_bible_studies || 0
                     }}));
                     
-                    if (c > 0) {
-                        badge.classList.remove('d-none');
-                        const sender = (data.recent_sender_name || '').trim();
-                        const countText = c > 99 ? '99+' : String(c);
-                        badge.textContent = sender ? `${countText} (${sender})` : countText;
-                        badge.title = sender ? `${c} New from ${sender}` : `${c} New messages`;
-                    } else {
-                        badge.classList.add('d-none');
+                    if (badge) {
+                        if (c > 0) {
+                            badge.classList.remove('d-none');
+                            const sender = (data.recent_sender_name || '').trim();
+                            const countText = c > 99 ? '99+' : String(c);
+                            badge.textContent = sender ? `${countText} (${sender})` : countText;
+                            badge.title = sender ? `${c} New from ${sender}` : `${c} New messages`;
+                        } else {
+                            badge.classList.add('d-none');
+                        }
                     }
+
+                    // Update sidebar badges
+                    const updateBadge = (id, count) => {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            if (count > 0) {
+                                el.textContent = count > 99 ? '99+' : count;
+                                el.classList.remove('d-none');
+                            } else {
+                                el.classList.add('d-none');
+                            }
+                        }
+                    };
+
+                    updateBadge('nav-badge-resources', data.new_resources || 0);
+                    updateBadge('nav-badge-announcements', data.new_announcements || 0);
+                    updateBadge('nav-badge-activities', data.new_activities || 0);
+                    updateBadge('nav-badge-bible-study', data.new_bible_studies || 0);
                 } catch (e) {
                     console.error('check_new_messages error:', e);
                 }
