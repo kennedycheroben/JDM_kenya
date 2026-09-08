@@ -78,8 +78,6 @@ if (empty(DB_NAME) || empty(DB_USER)) {
     die('Database Configuration Error: config.php is missing or not loaded. Please ensure it exists in the website root and contains DB_NAME and DB_USER.');
 }
 
-die("The server thinks DB_USER is: " . (defined('DB_USER') ? DB_USER : 'not defined yet') . "<br>Config Path checked: " . $configFile);
-
 try {
     $pdo = new PDO(
         'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
