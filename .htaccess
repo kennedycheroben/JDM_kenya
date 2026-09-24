@@ -1,14 +1,13 @@
 # JDM Kenya Module Redirection Rules
 RewriteEngine On
 
-# JDM OAuth Environment Variables (Local Development)
+# JDM OAuth Environment Variables (Production - cPanel)
 SetEnv JDM_OAUTH_ENABLED true
-SetEnv JDM_OAUTH_ISSUER http://127.0.0.1/JDM_kenya
-SetEnv JDM_OAUTH_PRIVATE_KEY_PATH /home/cheroben/jdm-oauth-keys/private.key
-SetEnv JDM_OAUTH_PUBLIC_KEY_PATH /home/cheroben/jdm-oauth-keys/public.key
+SetEnv JDM_OAUTH_ISSUER https://jdmkenya.com
+SetEnv JDM_OAUTH_PRIVATE_KEY_PATH /home/xqtrqexj/jdm-oauth-keys/private.key
+SetEnv JDM_OAUTH_PUBLIC_KEY_PATH /home/xqtrqexj/jdm-oauth-keys/public.key
 SetEnv JDM_OAUTH_ENCRYPTION_KEY 4fFCFHDqU3A9RiknaVgKoBXbCNrheLMHr53Z+Yr4Cxk=
 SetEnv JDM_OAUTH_AUDIT_SALT sjJUBq+ZGnmQE5HhQ0L5q+MNQXP1/r7ozKLfjhfVzAc=
-SetEnv JDM_OAUTH_ALLOW_INSECURE_LOCAL true
 SetEnv JDM_SESSION_COOKIE jdm_kenya_session
 
 # Normalize requests that include a leftover "/JDM_kenya" prefix
