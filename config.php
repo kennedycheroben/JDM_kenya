@@ -2,36 +2,78 @@
 /**
  * JDM Kenya — Central Configuration
  *
- * Credentials are loaded from the .env file in the project root via phpdotenv.
- * Never hardcode secrets in this file.
- * Copy .env.example → .env and fill in your values.
+ * Credentials are loaded from the .env file in the project root.
+ * No external library required — uses a built-in lightweight .env parser.
  *
- * On the live server: upload .env manually (it is gitignored) and run
- *   php composer.phar install --no-dev
- * in public_html, OR set PHP env vars via cPanel → Software → PHP Configuration.
+ * To update credentials: edit .env (never commit .env to git).
+ * Copy .env.example → .env and fill in your values on each server.
  */
 
-// Load .env via vlucas/phpdotenv only if the library is installed.
-// safeLoad() is used so a missing .env does not throw — it just skips.
-$_jdm_autoload = __DIR__ . '/vendor/autoload.php';
-if (file_exists($_jdm_autoload)) {
-    require_once $_jdm_autoload;
-    if (class_exists('Dotenv\\Dotenv')) {
-        Dotenv\Dotenv::createImmutable(__DIR__)->safeLoad();
+/**
+ * Lightweight .env parser — no composer/library required.
+ * Supports: KEY=value, KEY="quoted value", KEY='quoted value', # comments.
+ * Loads values into $_ENV and putenv() so getenv() works too.
+ */
+if (!function_exists('jdm_load_env')) {
+    function jdm_load_env(string $filePath): void {
+        if (!is_file($filePath) || !is_readable($filePath)) {
+            return;
+        }
+        $lines = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            // Skip comments and blank lines
+            if ($line === '' || $line[0] === '#') {
+                continue;
+            }
+            // Must contain =
+            $eqPos = strpos($line, '=');
+            if ($eqPos === false) {
+                continue;
+            }
+            $key   = trim(substr($line, 0, $eqPos));
+            $value = trim(substr($line, $eqPos + 1));
+
+            // Strip surrounding quotes (single or double)
+            if (strlen($value) >= 2) {
+                $first = $value[0];
+                $last  = $value[strlen($value) - 1];
+                if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                    $value = substr($value, 1, -1);
+                }
+            }
+
+            // Strip inline comment (only outside quotes — simple heuristic for our format)
+            // e.g. KEY=value # comment → value
+            if (strpos($value, ' #') !== false && $value[0] !== '"' && $value[0] !== "'") {
+                $value = trim(explode(' #', $value, 2)[0]);
+            }
+
+            if ($key === '') {
+                continue;
+            }
+
+            // Only set if not already defined in the environment (don't override server env vars)
+            if (!isset($_ENV[$key]) && getenv($key) === false) {
+                $_ENV[$key] = $value;
+                putenv("{$key}={$value}");
+            }
+        }
     }
 }
-unset($_jdm_autoload);
 
 /**
- * Read a value from $_ENV (phpdotenv) → getenv() (system/cPanel) → default.
- * Using a prefixed name to avoid conflicts with any global function called _env().
+ * Read a value: $_ENV (from .env) → getenv() (system/cPanel env) → default.
  */
 if (!function_exists('jdm_env')) {
     function jdm_env(string $key, string $default = ''): string {
         $val = $_ENV[$key] ?? getenv($key);
-        return ($val !== false && $val !== null && $val !== '') ? (string)$val : $default;
+        return ($val !== false && $val !== '') ? (string)$val : $default;
     }
 }
+
+// Load .env from project root (this file lives in the project root)
+jdm_load_env(__DIR__ . '/.env');
 
 // --- Database ---
 if (!defined('DB_HOST')) define('DB_HOST', jdm_env('DB_HOST', 'localhost'));
