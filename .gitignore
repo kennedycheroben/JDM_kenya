@@ -32,6 +32,9 @@ scratch/
 .agents/
 .codex/
 
-# Config files (use config.local.php for developer-specific local overrides)
-config.php
+# Environment & config files — never commit secrets
+.env
 config.local.php
+
+# config.php is now safe to commit (it reads from .env, no hardcoded secrets)
+# config.php
