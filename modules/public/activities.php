@@ -9,8 +9,87 @@ function navActive($page) {
 }
 $activities = $pdo->query('SELECT * FROM activities ORDER BY date DESC')->fetchAll(PDO::FETCH_ASSOC);
 
+if (!function_exists('render_event_description')) {
+    function render_event_description(string $rawContent, int $threshold = 120): string {
+        $content = trim($rawContent);
+        if ($content === '') {
+            return '';
+        }
+        $length = mb_strlen($content, 'UTF-8');
+        $hasNewlines = (strpos($content, "\n") !== false || strpos($content, "\r") !== false);
+
+        if ($length <= $threshold && !$hasNewlines) {
+            return '<div class="card-text text-secondary small flex-grow-1 event-desc-full">' . nl2br(escape($content)) . '</div>';
+        }
+
+        $preview = mb_substr($content, 0, $threshold, 'UTF-8');
+        $lastSpace = mb_strrpos($preview, ' ', 0, 'UTF-8');
+        if ($lastSpace !== false && $lastSpace > ($threshold - 30)) {
+            $preview = mb_substr($preview, 0, $lastSpace, 'UTF-8');
+        }
+
+        $previewHtml = escape($preview) . '&hellip;';
+        $fullHtml = nl2br(escape($content));
+
+        return '<div class="card-text text-secondary small flex-grow-1 event-desc-container">' .
+            '<details class="event-toggle">' .
+                '<summary class="event-summary">' .
+                    '<span class="event-preview">' . $previewHtml . '</span> ' .
+                    '<span class="event-toggle-btn text-primary fw-semibold event-more">View more <i class="bi bi-chevron-down small"></i></span>' .
+                    '<span class="event-toggle-btn text-primary fw-semibold event-less">View less <i class="bi bi-chevron-up small"></i></span>' .
+                '</summary>' .
+                '<div class="event-full mt-2">' . $fullHtml . '</div>' .
+            '</details>' .
+        '</div>';
+    }
+}
+
 $isMemberPortal = !empty($userRole);
 ?>
+<style>
+.event-toggle > summary {
+    list-style: none;
+    cursor: pointer;
+    outline: none;
+}
+.event-toggle > summary::-webkit-details-marker {
+    display: none;
+}
+.event-toggle .event-more {
+    display: inline-block;
+    cursor: pointer;
+    margin-left: 4px;
+}
+.event-toggle .event-less {
+    display: none;
+    cursor: pointer;
+    margin-top: 6px;
+}
+.event-toggle[open] {
+    display: flex;
+    flex-direction: column;
+}
+.event-toggle[open] > summary {
+    order: 2;
+}
+.event-toggle[open] > .event-full {
+    order: 1;
+}
+.event-toggle[open] .event-preview {
+    display: none;
+}
+.event-toggle[open] .event-more {
+    display: none;
+}
+.event-toggle[open] .event-less {
+    display: inline-block;
+}
+.event-full {
+    line-height: 1.6;
+    word-break: break-word;
+    white-space: normal;
+}
+</style>
 <?php if ($isMemberPortal): ?>
 <?php
     ob_start();
@@ -40,7 +119,7 @@ $isMemberPortal = !empty($userRole);
                             <small class="text-muted"><i class="bi bi-calendar3"></i> <?= date('M d, Y', strtotime($activity['date'] ?? $activity['event_date'] ?? 'now')) ?></small>
                         </div>
                         <h5 class="card-title"><?= escape($activity['title'] ?? '') ?></h5>
-                        <p class="card-text text-secondary small flex-grow-1"><?= escape(substr($activity['content'] ?? '', 0, 100)) ?>...</p>
+                        <?= render_event_description($activity['content'] ?? '') ?>
                     </div>
                     <div class="card-footer bg-transparent border-0">
                         <small class="text-muted"><i class="bi bi-geo-alt"></i> Nairobi, Kenya</small>
@@ -171,10 +250,10 @@ $isMemberPortal = !empty($userRole);
                                     <i class="bi bi-calendar-event text-white" style="font-size: 3rem;"></i>
                                 </div>
                             <?php endif; ?>
-                            <div class="card-body">
-                                <span class="badge bg-primary mb-2"><?= date('M d, Y', strtotime($activity['date'])) ?></span>
+                            <div class="card-body d-flex flex-column">
+                                <span class="badge bg-primary mb-2 align-self-start"><?= date('M d, Y', strtotime($activity['date'])) ?></span>
                                 <h5 class="card-title"><?= escape($activity['title']) ?></h5>
-                                <p class="card-text text-secondary small"><?= escape(substr($activity['content'], 0, 100)) ?>...</p>
+                                <?= render_event_description($activity['content'] ?? '') ?>
                             </div>
                             <div class="card-footer bg-transparent border-0">
                                 <small class="text-muted"><i class="bi bi-geo-alt"></i> Nairobi, Kenya</small>

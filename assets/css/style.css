@@ -1647,6 +1647,51 @@ main {
   font-size: 0.85rem;
 }
 
+/* Event description expansion (View More / View Less) */
+.event-toggle > summary {
+  list-style: none;
+  cursor: pointer;
+  outline: none;
+}
+.event-toggle > summary::-webkit-details-marker {
+  display: none;
+}
+.event-toggle .event-more {
+  display: inline-block;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.event-toggle .event-less {
+  display: none;
+  cursor: pointer;
+  margin-top: 6px;
+}
+.event-toggle[open] {
+  display: flex;
+  flex-direction: column;
+}
+.event-toggle[open] > summary {
+  order: 2;
+}
+.event-toggle[open] > .event-full {
+  order: 1;
+}
+.event-toggle[open] .event-preview {
+  display: none;
+}
+.event-toggle[open] .event-more {
+  display: none;
+}
+.event-toggle[open] .event-less {
+  display: inline-block;
+}
+.event-full {
+  line-height: 1.6;
+  word-break: break-word;
+  white-space: normal;
+}
+
+
 
 
 
