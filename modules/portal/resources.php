@@ -6,6 +6,10 @@ $userName = $_SESSION['user_name'] ?? null;
 
 $isLoggedIn = !empty($userRole);
 $isMemberPortal = ($userRole === 'member' || $userRole === 'admin' || $userRole === 'super_admin');
+if ($isLoggedIn && !empty($_SESSION['user_id'])) {
+    require_once dirname(__FILE__) . '/../../core/notifications.php';
+    mark_all_content_as_read($pdo, (int)$_SESSION['user_id'], 'resource');
+}
 $currentPage = basename($_SERVER['PHP_SELF']);
 if (!function_exists('navActive')) {
     function navActive($page) {

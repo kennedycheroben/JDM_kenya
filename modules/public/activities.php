@@ -45,6 +45,10 @@ if (!function_exists('render_event_description')) {
 }
 
 $isMemberPortal = !empty($userRole);
+if ($isMemberPortal && !empty($_SESSION['user_id'])) {
+    require_once dirname(__FILE__) . '/../../core/notifications.php';
+    mark_all_content_as_read($pdo, (int)$_SESSION['user_id'], 'activity');
+}
 ?>
 <style>
 .event-toggle > summary {

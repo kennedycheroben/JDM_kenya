@@ -2,6 +2,10 @@
 require_once __DIR__.'/../../core/db_connect.php'; require_once __DIR__.'/../../core/bible_studies.php';
 header('Cache-Control: private, no-store');
 $user=bs_require_eligible($pdo); $uid=(int)$user['id']; $message='';$error='';
+if ($uid > 0) {
+    require_once __DIR__.'/../../core/notifications.php';
+    mark_all_content_as_read($pdo, $uid, 'bible_study');
+}
 if(!bs_schema_ready($pdo)){
     http_response_code(503);$page_title='General Bible Study';$page_styles=[BASE_PATH.'/assets/css/bible_study.css'];ob_start();
     ?><div class="bs-hero mb-4"><div><h1 class="h2 mb-1">General Bible Study</h1><p class="mb-0">Learn, reflect and grow together.</p></div></div><div class="alert alert-info" role="status"><h2 class="h5">Bible Study is being prepared</h2><p class="mb-0">This section is temporarily unavailable while setup is completed. Please try again shortly.</p></div><?php

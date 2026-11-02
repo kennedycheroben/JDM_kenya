@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/notifications.php';
 
 if (ob_get_level() > 0) {
     ob_clean();
@@ -7,6 +8,7 @@ if (ob_get_level() > 0) {
 header('Content-Type: application/json; charset=utf-8');
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
+$userRole = (string)($_SESSION['user_role'] ?? 'member');
 if ($userId <= 0) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Not authenticated']);
@@ -53,35 +55,28 @@ try {
         $perSenderBreakdown[(int)$row['sender_id']] = (int)$row['unread_count'];
     }
 
-    // New Resources
-    $stmt = $pdo->query("SELECT COUNT(*) FROM resources WHERE upload_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
-    $newResourcesCount = (int)$stmt->fetchColumn();
-
-    // New Announcements
-    $stmt = $pdo->query("SELECT COUNT(*) FROM announcements WHERE COALESCE(date_created, date_posted) >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
-    $newAnnouncementsCount = (int)$stmt->fetchColumn();
-
-    // New Activities
-    $stmt = $pdo->query("SELECT COUNT(*) FROM activities WHERE date >= CURDATE()");
-    $newActivitiesCount = (int)$stmt->fetchColumn();
-
-    // New Bible Study Materials
-    $stmt = $pdo->query("SELECT COUNT(*) FROM bible_study_materials WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND is_published = 1");
-    $newBibleStudyCount = (int)$stmt->fetchColumn();
+    // Role-aware, per-user unread tracking counts
+    $notifCounts = get_user_notification_counts($pdo, $userId, $userRole);
 
     echo json_encode([
         'ok' => true,
         'unread_count' => $totalCount,
         'recent_sender_name' => $recentSenderName,
         'per_sender_breakdown' => $perSenderBreakdown,
-        'new_resources' => $newResourcesCount,
-        'new_announcements' => $newAnnouncementsCount,
-        'new_activities' => $newActivitiesCount,
-        'new_bible_studies' => $newBibleStudyCount,
+        'new_resources' => $notifCounts['new_resources'],
+        'new_announcements' => $notifCounts['new_announcements'],
+        'new_activities' => $notifCounts['new_activities'],
+        'new_bible_studies' => $notifCounts['new_bible_studies'],
+        'bible_admin_tasks' => $notifCounts['bible_admin_tasks'],
+        'new_prayers' => $notifCounts['new_prayers'],
+        'unread_contacts' => $notifCounts['unread_contacts'],
+        'pending_applications' => $notifCounts['pending_applications'],
+        'pending_sports' => $notifCounts['pending_sports'],
     ]);
 } catch (Throwable $e) {
     error_log('check_new_messages error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Server error']);
 }
+
 

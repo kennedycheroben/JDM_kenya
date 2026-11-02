@@ -6,6 +6,11 @@ if (empty($_SESSION['user_role'])) {
     exit;
 }
 
+if (!empty($_SESSION['user_id'])) {
+    require_once dirname(__FILE__) . '/../../core/notifications.php';
+    mark_all_content_as_read($pdo, (int)$_SESSION['user_id'], 'announcement');
+}
+
 $userRole = $_SESSION['user_role'] ?? 'member';
 
 try {

@@ -119,6 +119,10 @@ if ($user_id > 0) {
     }
 }
 
+// Load notification counts for real sidebar indicators
+require_once dirname(__DIR__, 2) . '/core/notifications.php';
+$sidebarCounts = get_user_notification_counts($pdo, (int)$user_id, (string)$user_role);
+
 // Dynamic dual-role badge system
 function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $current_page) {
     $roles = [];
@@ -617,7 +621,7 @@ if (!isset($page_title)) {
                 <li class="nav-item mb-2">
                     <a class="nav-link text-white d-flex align-items-center justify-content-between" href="bible_study.php">
                         <span><i class="bi bi-book-half"></i> Bible Study</span>
-                        <span id="nav-badge-bible-study" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
+                        <span id="nav-badge-bible-study" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_bible_studies'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_bible_studies'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_bible_studies'] ?? 0) ?></span>
                     </a>
                 </li>
                 <?php if ($is_bible_study_leader): ?>
@@ -629,8 +633,9 @@ if (!isset($page_title)) {
                 <?php endif; ?>
                 <?php if ($is_super_admin): ?>
                 <li class="nav-item mb-2">
-                    <a class="nav-link text-white" href="bible_study_admin.php">
-                        <i class="bi bi-calendar2-week"></i> Study Admin
+                    <a class="nav-link text-white d-flex align-items-center justify-content-between" href="bible_study_admin.php">
+                        <span><i class="bi bi-calendar2-week"></i> Study Admin</span>
+                        <span id="nav-badge-bible-admin" class="badge bg-warning text-dark rounded-pill <?= ($sidebarCounts['bible_admin_tasks'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['bible_admin_tasks'] ?? 0) > 99 ? '99+' : ($sidebarCounts['bible_admin_tasks'] ?? 0) ?></span>
                     </a>
                 </li>
                 <?php endif; ?>
@@ -653,37 +658,28 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="applications.php">
-                            <i class="bi bi-file-earmark-text"></i> Applications
-                            <?php
-                            $appCount = 0;
-                            try {
-                                $stmtApp = $pdo->query("SELECT COUNT(*) as c FROM users WHERE is_approved = 0 AND category IN ('partner','missionary')");
-                                $appRow = $stmtApp->fetch(PDO::FETCH_ASSOC);
-                                $appCount = (int)$appRow['c'];
-                            } catch (Throwable $e) {}
-                            if ($appCount > 0): ?>
-                                <span class="badge bg-danger ms-1"><?= $appCount ?></span>
-                            <?php endif; ?>
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="applications.php">
+                            <span><i class="bi bi-file-earmark-text"></i> Applications</span>
+                            <span id="nav-badge-applications" class="badge bg-danger ms-1 <?= ($sidebarCounts['pending_applications'] ?? 0) > 0 ? '' : 'd-none' ?>"><?= ($sidebarCounts['pending_applications'] ?? 0) > 99 ? '99+' : ($sidebarCounts['pending_applications'] ?? 0) ?></span>
                         </a>
                     </li>
                     <?php endif; ?>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white d-flex align-items-center justify-content-between" href="admin_dashboard.php?tab=activities">
                             <span><i class="bi bi-calendar-event"></i> Activities</span>
-                            <span id="nav-badge-activities" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
+                            <span id="nav-badge-activities" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_activities'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_activities'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_activities'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white d-flex align-items-center justify-content-between" href="admin_dashboard.php?tab=resources">
                             <span><i class="bi bi-file-earmark-pdf"></i> Resources</span>
-                            <span id="nav-badge-resources" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
+                            <span id="nav-badge-resources" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_resources'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_resources'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_resources'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white d-flex align-items-center justify-content-between" href="admin_dashboard.php?tab=announcements">
                             <span><i class="bi bi-megaphone"></i> Newsroom</span>
-                            <span id="nav-badge-announcements" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
+                            <span id="nav-badge-announcements" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_announcements'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_announcements'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_announcements'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
@@ -692,13 +688,15 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="admin_dashboard.php?tab=messages">
-                            <i class="bi bi-envelope"></i> Contact Messages
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="admin_dashboard.php?tab=messages">
+                            <span><i class="bi bi-envelope"></i> Contact Messages</span>
+                            <span id="nav-badge-contact-messages" class="badge bg-danger rounded-pill <?= ($sidebarCounts['unread_contacts'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['unread_contacts'] ?? 0) > 99 ? '99+' : ($sidebarCounts['unread_contacts'] ?? 0) ?></span>
                         </a>
                     </li>
                     <?php if ($is_sports_admin): ?><li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="sports_admin.php">
-                            <i class="bi bi-trophy-fill text-warning"></i> Sports Admin
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="sports_admin.php">
+                            <span><i class="bi bi-trophy-fill text-warning"></i> Sports Admin</span>
+                            <span id="nav-badge-sports-admin" class="badge bg-warning text-dark rounded-pill <?= ($sidebarCounts['pending_sports'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['pending_sports'] ?? 0) > 99 ? '99+' : ($sidebarCounts['pending_sports'] ?? 0) ?></span>
                         </a>
                     </li><?php endif; ?>
                     <li class="nav-item mb-2"><a class="nav-link text-white" href="<?= escape($sports_action_url) ?>"><i class="bi bi-person-plus"></i> <?= escape($sports_action_label) ?></a></li>
@@ -715,31 +713,33 @@ if (!isset($page_title)) {
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="chat.php">
-                            <i class="bi bi-chat-dots"></i> Chat                                        
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="chat.php">
+                            <span><i class="bi bi-chat-dots"></i> Chat</span>
+                            <span id="nav-badge-chat" class="badge bg-danger rounded-pill <?= ($sidebarCounts['unread_chat'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['unread_chat'] ?? 0) > 99 ? '99+' : ($sidebarCounts['unread_chat'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link text-white" href="prayer_wall.php">
-                            <i class="bi bi-heart"></i> Prayer Wall
+                        <a class="nav-link text-white d-flex align-items-center justify-content-between" href="prayer_wall.php">
+                            <span><i class="bi bi-heart"></i> Prayer Wall</span>
+                            <span id="nav-badge-prayers" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_prayers'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_prayers'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_prayers'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white d-flex align-items-center justify-content-between" href="news_room.php">
                             <span><i class="bi bi-megaphone"></i> Newsroom</span>
-                            <span id="nav-badge-announcements" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
+                            <span id="nav-badge-announcements" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_announcements'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_announcements'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_announcements'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white d-flex align-items-center justify-content-between" href="activities.php">
                             <span><i class="bi bi-calendar-event"></i> Activities</span>
-                            <span id="nav-badge-activities" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
+                            <span id="nav-badge-activities" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_activities'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_activities'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_activities'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
                         <a class="nav-link text-white d-flex align-items-center justify-content-between" href="resources.php">
                             <span><i class="bi bi-file-earmark-pdf"></i> Resources</span>
-                            <span id="nav-badge-resources" class="badge bg-danger rounded-pill d-none" style="font-size: 0.65em;"></span>
+                            <span id="nav-badge-resources" class="badge bg-danger rounded-pill <?= ($sidebarCounts['new_resources'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['new_resources'] ?? 0) > 99 ? '99+' : ($sidebarCounts['new_resources'] ?? 0) ?></span>
                         </a>
                     </li>
                     <li class="nav-item mb-2">
@@ -754,7 +754,7 @@ if (!isset($page_title)) {
                     </li>
                     <li class="nav-item mb-2"><a class="nav-link text-white" href="<?= escape($sports_action_url) ?>"><i class="bi bi-person-plus"></i> <?= escape($sports_action_label) ?></a></li>
                     <?php if ($is_sports_admin): ?>
-                    <li class="nav-item mb-2"><a class="nav-link text-white" href="sports_admin.php"><i class="bi bi-clipboard2-check"></i> Sports Admin Dashboard</a></li>
+                    <li class="nav-item mb-2"><a class="nav-link text-white d-flex align-items-center justify-content-between" href="sports_admin.php"><span><i class="bi bi-clipboard2-check"></i> Sports Admin Dashboard</span><span id="nav-badge-sports-admin" class="badge bg-warning text-dark rounded-pill <?= ($sidebarCounts['pending_sports'] ?? 0) > 0 ? '' : 'd-none' ?>" style="font-size: 0.65em;"><?= ($sidebarCounts['pending_sports'] ?? 0) > 99 ? '99+' : ($sidebarCounts['pending_sports'] ?? 0) ?></span></a></li>
                     <?php endif; ?>
                 <li class="nav-item mb-2">
                     <a class="nav-link text-white" href="about.php">
@@ -1013,6 +1013,12 @@ if (!isset($page_title)) {
                     updateBadge('nav-badge-announcements', data.new_announcements || 0);
                     updateBadge('nav-badge-activities', data.new_activities || 0);
                     updateBadge('nav-badge-bible-study', data.new_bible_studies || 0);
+                    updateBadge('nav-badge-bible-admin', data.bible_admin_tasks || 0);
+                    updateBadge('nav-badge-prayers', data.new_prayers || 0);
+                    updateBadge('nav-badge-contact-messages', data.unread_contacts || 0);
+                    updateBadge('nav-badge-applications', data.pending_applications || 0);
+                    updateBadge('nav-badge-sports-admin', data.pending_sports || 0);
+                    updateBadge('nav-badge-chat', data.unread_count || 0);
                 } catch (e) {
                     console.error('check_new_messages error:', e);
                 }

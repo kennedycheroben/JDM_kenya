@@ -9,6 +9,11 @@ if (empty($_SESSION['user_role'])) {
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $userRole = $_SESSION['user_role'] ?? 'member';
 
+if ($userId > 0) {
+    require_once dirname(__FILE__) . '/../../core/notifications.php';
+    mark_all_content_as_read($pdo, $userId, 'prayer_request');
+}
+
 $error = '';
 $success = '';
 

@@ -7,6 +7,11 @@ if (empty($_SESSION['user_role'])) {
     exit;
 }
 
+if (!empty($_SESSION['user_id'])) {
+    require_once dirname(__FILE__) . '/../../core/notifications.php';
+    mark_all_content_as_read($pdo, (int)$_SESSION['user_id'], 'announcement');
+}
+
 $announcements = $pdo->query('SELECT id, title, content, COALESCE(date_created, date_posted) AS date_created FROM announcements ORDER BY COALESCE(date_created, date_posted) DESC, id DESC')->fetchAll(PDO::FETCH_ASSOC);
 
 ob_start();
