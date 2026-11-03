@@ -31,7 +31,11 @@ $error_msg = '';
 
 // Flash messages from actions
 if (!empty($_GET['deleted'])) {
-    $success_msg = 'Member deleted successfully.';
+    $success_msg = 'Member permanently deleted.';
+} elseif (!empty($_GET['deactivated'])) {
+    $success_msg = 'Member account deactivated successfully. Login is blocked and history is preserved.';
+} elseif (!empty($_GET['activated'])) {
+    $success_msg = 'Member account activated successfully.';
 } elseif (!empty($_GET['error'])) {
     $errorCode = $_GET['error'];
     if ($errorCode === 'cannot_delete_self') {
@@ -62,7 +66,7 @@ $perPage = 50;
 $offset = ($page - 1) * $perPage;
 
 $countQuery = 'SELECT COUNT(*) FROM users WHERE 1=1';
-$query = 'SELECT id, name, email, whatsapp_phone, category, role, created_at FROM users WHERE 1=1';
+$query = 'SELECT id, name, email, whatsapp_phone, category, role, account_status, created_at FROM users WHERE 1=1';
 $params = [];
 
 if (!$isAdmin) {
@@ -307,14 +311,19 @@ ob_start();
                                             }
                                             ?>
                                             <span class="badge <?= $rb ?>"><?= escape($r) ?></span>
+                                            <?php if (($member['account_status'] ?? 'active') === 'disabled'): ?>
+                                                <span class="badge bg-secondary ms-1">Deactivated</span>
+                                            <?php elseif (($member['account_status'] ?? 'active') === 'suspended'): ?>
+                                                <span class="badge bg-warning text-dark ms-1">Suspended</span>
+                                            <?php endif; ?>
                                         </td>
                                         <td>
                                                 <a href="view_member.php?id=<?= (int)$member['id'] ?>" class="btn btn-sm btn-primary">
                                                     <i class="bi bi-eye"></i> View
                                                 </a>
                                                 <?php if ($is_super_admin): ?>
-                                                    <a href="delete_member.php?id=<?= (int)$member['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this user? This cannot be undone.');">
-                                                        <i class="bi bi-trash"></i> Delete
+                                                    <a href="delete_member.php?id=<?= (int)$member['id'] ?>" class="btn btn-sm btn-outline-danger" title="Manage account lifecycle">
+                                                        <i class="bi bi-person-gear"></i> Manage
                                                     </a>
                                                 <?php endif; ?>
                                         </td>

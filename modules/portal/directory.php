@@ -10,11 +10,11 @@ $is_super_admin = ($_SESSION['user_role'] === 'super_admin');
 $can_view_contact = in_array($_SESSION['user_role'] ?? '', ['admin', 'super_admin']);
 $user_role = $_SESSION['user_role'] ?? 'member';
 if ($user_role === 'super_admin') {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND (account_status IS NULL OR account_status != 'deleted') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 } elseif ($user_role === 'admin') {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' AND (account_status IS NULL OR account_status != 'deleted') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 } else {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category NOT IN ('partner', 'missionary') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category NOT IN ('partner', 'missionary') AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 }
 
 ob_start();
@@ -28,41 +28,50 @@ ob_start();
 </div>
 
 <div class="row g-3">
-    <?php foreach ($members as $m): ?>
-        <div class="col-12 col-md-6 col-lg-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body d-flex gap-3 align-items-center">
-                    <?php if (!empty($m['pfp_path'])): ?>
-                        <img src="<?= escape($m['pfp_path']) ?>" alt="Profile picture" class="rounded-circle" style="width:56px;height:56px;object-fit:cover;">
-                    <?php else: ?>
-                        <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width:56px;height:56px;">
-                            <i class="bi bi-person text-secondary" style="font-size:1.5rem;"></i>
-                        </div>
-                    <?php endif; ?>
-                    <div class="flex-grow-1">
-                        <div class="fw-semibold"><?= escape($m['name']) ?></div>
-                        <?php if ($can_view_contact): ?>
-                        <div class="small">
-                            <a href="<?= escape(waLink($m['whatsapp_phone'] ?? '')) ?>" target="_blank" rel="noopener">
-                                <i class="bi bi-whatsapp"></i> <?= escape($m['whatsapp_phone'] ?? '') ?>
-                            </a>
-                        </div>
-                        <?php else: ?>
-                        <div class="small text-muted">
-                            <i class="bi bi-whatsapp"></i> <?= escape(maskPhone($m['whatsapp_phone'] ?? '')) ?>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <i class="bi bi-chat-dots text-muted"></i>
-                </div>
-                <div class="card-footer bg-transparent">
-                    <a class="btn btn-sm btn-outline-primary w-100" href="chat.php?with=<?= (int)$m['id'] ?>">
-                        <i class="bi bi-chat"></i> Message
-                    </a>
-                </div>
+    <?php if (empty($members)): ?>
+        <div class="col-12">
+            <div class="alert alert-info text-center py-4">
+                <i class="bi bi-people fs-3 d-block mb-2"></i>
+                No directory members found.
             </div>
         </div>
-    <?php endforeach; ?>
+    <?php else: ?>
+        <?php foreach ($members as $m): ?>
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body d-flex gap-3 align-items-center">
+                        <?php if (!empty($m['pfp_path'])): ?>
+                            <img src="<?= escape($m['pfp_path']) ?>" alt="Profile picture" class="rounded-circle" style="width:56px;height:56px;object-fit:cover;">
+                        <?php else: ?>
+                            <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width:56px;height:56px;">
+                                <i class="bi bi-person text-secondary" style="font-size:1.5rem;"></i>
+                            </div>
+                        <?php endif; ?>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold"><?= escape($m['name']) ?></div>
+                            <?php if ($can_view_contact): ?>
+                            <div class="small">
+                                <a href="<?= escape(waLink($m['whatsapp_phone'] ?? '')) ?>" target="_blank" rel="noopener">
+                                    <i class="bi bi-whatsapp"></i> <?= escape($m['whatsapp_phone'] ?? '') ?>
+                                </a>
+                            </div>
+                            <?php else: ?>
+                            <div class="small text-muted">
+                                <i class="bi bi-whatsapp"></i> <?= escape(maskPhone($m['whatsapp_phone'] ?? '')) ?>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        <i class="bi bi-chat-dots text-muted"></i>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <a class="btn btn-sm btn-outline-primary w-100" href="chat.php?with=<?= (int)$m['id'] ?>">
+                            <i class="bi bi-chat"></i> Message
+                        </a>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
 </div>
 
 <?php

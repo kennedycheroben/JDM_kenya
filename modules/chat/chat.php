@@ -139,22 +139,20 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'send') {
     exit;
 }
 
-$with = (int)($_GET['with'] ?? 0);
-if ($with <= 0) {
-    // Default: pick the first other user
-    $stmt = $pdo->prepare('SELECT id FROM users WHERE id <> ? ORDER BY name ASC LIMIT 1');
-    $stmt->execute([$meId]);
-    $with = (int)($stmt->fetchColumn() ?: 0);
-}
-
 $isSuperAdmin = ($_SESSION['user_role'] ?? '') === 'super_admin';
 if ($isSuperAdmin) {
-    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? ORDER BY name ASC");
+    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND (account_status IS NULL OR account_status != 'suspended') ORDER BY name ASC");
 } else {
-    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND category != 'partner' ORDER BY name ASC");
+    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND category != 'partner' AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY name ASC");
 }
 $peopleStmt->execute([$meId]);
 $people = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$with = (int)($_GET['with'] ?? 0);
+if ($with <= 0 && !empty($people)) {
+    // Default: pick the first available contact from the visible members list
+    $with = (int)$people[0]['id'];
+}
 
 $withUser = null;
 if ($with > 0) {
@@ -202,23 +200,30 @@ ob_start();
                 <h6 class="mb-0"><i class="bi bi-people"></i> Members</h6>
             </div>
             <div class="list-group list-group-flush" style="max-height: 70vh; overflow:auto;">
-                <?php foreach ($people as $p): ?>
-                    <a class="list-group-item list-group-item-action d-flex gap-2 align-items-center <?= $with === (int)$p['id'] ? 'active' : '' ?>"
-                       href="chat.php?with=<?= (int)$p['id'] ?>"
-                       data-member-id="<?= (int)$p['id'] ?>">
-                        <?php if (!empty($p['pfp_path'])): ?>
-                            <img src="<?= escape($p['pfp_path']) ?>" class="rounded-circle" style="width:36px;height:36px;object-fit:cover;" alt="pfp">
-                        <?php else: ?>
-                            <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
-                                <i class="bi bi-person text-secondary"></i>
+                <?php if (empty($people)): ?>
+                    <div class="p-4 text-muted text-center small">
+                        <i class="bi bi-people fs-4 d-block mb-1 text-secondary"></i>
+                        No other members available to message.
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($people as $p): ?>
+                        <a class="list-group-item list-group-item-action d-flex gap-2 align-items-center <?= $with === (int)$p['id'] ? 'active' : '' ?>"
+                           href="chat.php?with=<?= (int)$p['id'] ?>"
+                           data-member-id="<?= (int)$p['id'] ?>">
+                            <?php if (!empty($p['pfp_path'])): ?>
+                                <img src="<?= escape($p['pfp_path']) ?>" class="rounded-circle" style="width:36px;height:36px;object-fit:cover;" alt="pfp">
+                            <?php else: ?>
+                                <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
+                                    <i class="bi bi-person text-secondary"></i>
+                                </div>
+                            <?php endif; ?>
+                            <div class="flex-grow-1 d-flex align-items-center justify-content-between">
+                                <div class="fw-semibold"><?= escape($p['name']) ?></div>
+                                <span class="badge bg-danger unread-count d-none" data-uid="<?= (int)$p['id'] ?>">0</span>
                             </div>
-                        <?php endif; ?>
-                        <div class="flex-grow-1 d-flex align-items-center justify-content-between">
-                            <div class="fw-semibold"><?= escape($p['name']) ?></div>
-                            <span class="badge bg-danger unread-count d-none" data-uid="<?= (int)$p['id'] ?>">0</span>
-                        </div>
-                    </a>
-                <?php endforeach; ?>
+                        </a>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>

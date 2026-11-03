@@ -7,8 +7,13 @@
  */
 
 if (!function_exists('ensureUserContentReadsTable')) {
-    function ensureUserContentReadsTable(PDO $pdo): void
+    function ensureUserContentReadsTable(PDO $pdo, bool $force = false): void
     {
+        static $ensured = false;
+        if ($ensured && !$force) {
+            return;
+        }
+
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS user_content_reads (
                 id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -21,6 +26,8 @@ if (!function_exists('ensureUserContentReadsTable')) {
                 KEY idx_user_type (user_id, content_type)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+
+        $ensured = true;
     }
 }
 

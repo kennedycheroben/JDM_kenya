@@ -192,7 +192,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $viewerRole === 'super_a
                 $stmtNotif->execute([$selfId, $targetId, "ℹ️ Your account role has been updated to Member.\n\nReason: {$reason}"]);
             } elseif ($action === 'delete_user') {
                 require_once dirname(__FILE__) . '/../../core/users.php';
-                deleteUser($pdo, $targetId);
+                deleteUser($pdo, $targetId, true);
                 header('Location: view_members.php?deleted=1');
                 exit;
             }
@@ -441,12 +441,9 @@ ob_start();
                 </form>
             </div>
             <div class="col-md-4">
-                <form method="post" onsubmit="return confirm('Delete this user permanently? This cannot be undone.') && promptReason(this, 'deleting user')">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="delete_user">
-                    <input type="hidden" name="reason" value="">
-                    <button class="btn btn-outline-danger w-100"><i class="bi bi-trash"></i> Delete User</button>
-                </form>
+                <a href="delete_member.php?id=<?= (int)$u['id'] ?>" class="btn btn-outline-danger w-100">
+                    <i class="bi bi-person-x"></i> Manage Status / Delete
+                </a>
             </div>
         </div>
     </div>

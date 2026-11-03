@@ -1,8 +1,13 @@
 <?php
 
 if (!function_exists('ensureContactMessagesTable')) {
-    function ensureContactMessagesTable(PDO $pdo): void
+    function ensureContactMessagesTable(PDO $pdo, bool $force = false): void
     {
+        static $ensured = false;
+        if ($ensured && !$force) {
+            return;
+        }
+
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS contact_messages (
                 id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -55,5 +60,7 @@ if (!function_exists('ensureContactMessagesTable')) {
         } catch (Throwable $e) {
             error_log('contact_messages modify status: ' . $e->getMessage());
         }
+
+        $ensured = true;
     }
 }
