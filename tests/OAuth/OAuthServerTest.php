@@ -72,7 +72,8 @@ final class OAuthServerTest extends TestCase
         self::assertSame('11111111-2222-4333-8444-555555555555', $validated->getAttribute('oauth_user_id'));
         self::assertSame(['profile', 'email'], $validated->getAttribute('oauth_scopes'));
 
-        $tampered = substr($token, 0, -1).($token[-1] === 'a' ? 'b' : 'a');
+        // Tamper with signature payload (offset by 10 to ensure modification of significant signature bits)
+        $tampered = substr($token, 0, -10) . ($token[strlen($token) - 10] === 'a' ? 'b' : 'a') . substr($token, -9);
         $this->expectException(OAuthServerException::class);
         $resource->validateAuthenticatedRequest(
             (new ServerRequest([], [], 'https://jdm.test/oauth/userinfo.php', 'GET'))->withHeader('Authorization', 'Bearer '.$tampered)

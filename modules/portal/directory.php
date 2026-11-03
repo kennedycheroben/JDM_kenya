@@ -9,21 +9,35 @@ if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'member' && $_S
 $is_super_admin = ($_SESSION['user_role'] === 'super_admin');
 $can_view_contact = in_array($_SESSION['user_role'] ?? '', ['admin', 'super_admin']);
 $user_role = $_SESSION['user_role'] ?? 'member';
+
+$sort = ($_GET['sort'] ?? '') === 'newest' ? 'newest' : 'name';
+$orderClause = ($sort === 'newest') ? 'created_at DESC, id DESC' : 'name ASC, id DESC';
+
 if ($user_role === 'super_admin') {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND (account_status IS NULL OR account_status != 'deleted') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND (account_status IS NULL OR account_status != 'deleted') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
 } elseif ($user_role === 'admin') {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' AND (account_status IS NULL OR account_status != 'deleted') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' AND (account_status IS NULL OR account_status != 'deleted') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
 } else {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path FROM users WHERE role IN ('member','admin','super_admin') AND category NOT IN ('partner', 'missionary') AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND category NOT IN ('partner', 'missionary') AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
 }
 
 ob_start();
 ?>
 
-<div class="row mb-4">
-    <div class="col-12">
+<div class="row mb-4 align-items-center">
+    <div class="col-12 col-md-7">
         <h2><i class="bi bi-people"></i> Members Directory</h2>
         <p class="text-muted mb-0">Connect with our community members</p>
+    </div>
+    <div class="col-12 col-md-5 text-md-end mt-2 mt-md-0">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Sort directory">
+            <a href="?sort=name" class="btn <?= $sort === 'name' ? 'btn-primary' : 'btn-outline-primary' ?>">
+                <i class="bi bi-sort-alpha-down"></i> Name (A–Z)
+            </a>
+            <a href="?sort=newest" class="btn <?= $sort === 'newest' ? 'btn-primary' : 'btn-outline-primary' ?>">
+                <i class="bi bi-clock-history"></i> Newest First
+            </a>
+        </div>
     </div>
 </div>
 
@@ -48,7 +62,10 @@ ob_start();
                             </div>
                         <?php endif; ?>
                         <div class="flex-grow-1">
-                            <div class="fw-semibold"><?= escape($m['name']) ?></div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-semibold"><?= escape($m['name']) ?></span>
+                                <span class="badge bg-light text-secondary border small">#<?= (int)$m['id'] ?></span>
+                            </div>
                             <?php if ($can_view_contact): ?>
                             <div class="small">
                                 <a href="<?= escape(waLink($m['whatsapp_phone'] ?? '')) ?>" target="_blank" rel="noopener">
@@ -59,6 +76,11 @@ ob_start();
                             <div class="small text-muted">
                                 <i class="bi bi-whatsapp"></i> <?= escape(maskPhone($m['whatsapp_phone'] ?? '')) ?>
                             </div>
+                            <?php endif; ?>
+                            <?php if ($sort === 'newest' && !empty($m['created_at'])): ?>
+                                <div class="small text-muted" style="font-size: 0.75rem;">
+                                    <i class="bi bi-calendar3"></i> Joined <?= date('M d, Y', strtotime($m['created_at'])) ?>
+                                </div>
                             <?php endif; ?>
                         </div>
                         <i class="bi bi-chat-dots text-muted"></i>

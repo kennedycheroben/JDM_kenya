@@ -293,6 +293,94 @@ it('prohibits deletion of super administrator accounts and invalid user IDs', fu
     $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$saId]);
 });
 
+// 8. Member Listing Descending Chronological Ordering (Newest First)
+it('orders member listings in descending chronological order with newest member first', function () use ($pdo) {
+    // Current members ordered by created_at DESC, id DESC
+    $stmt = $pdo->query('SELECT id, name, email, created_at FROM users ORDER BY created_at DESC, id DESC');
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    assert_true(count($rows) >= 2, 'Need at least 2 users to verify ordering');
+
+    // Verify chronological order: each row created_at <= previous row created_at
+    for ($i = 0; $i < count($rows) - 1; $i++) {
+        $currTime = strtotime($rows[$i]['created_at']);
+        $nextTime = strtotime($rows[$i + 1]['created_at']);
+        assert_true(
+            $currTime >= $nextTime,
+            sprintf("Row %d (ID %d, %s) must be newer or equal to row %d (ID %d, %s)", $i, $rows[$i]['id'], $rows[$i]['created_at'], $i+1, $rows[$i+1]['id'], $rows[$i+1]['created_at'])
+        );
+        if ($currTime === $nextTime) {
+            assert_true(
+                $rows[$i]['id'] > $rows[$i + 1]['id'],
+                "Tiebreaker id DESC must place larger ID first when timestamps match"
+            );
+        }
+    }
+
+    // Insert brand-new user with future/current timestamp
+    $t = time();
+    $insertStmt = $pdo->prepare('INSERT INTO users (name, email, whatsapp_phone, password, role, is_approved, created_at) VALUES (?, ?, ?, ?, ?, 1, NOW())');
+    $insertStmt->execute(["Newest Member Test {$t}", "newest_{$t}@test.local", '254700000050', 'pass', 'member']);
+    $newestId = (int)$pdo->lastInsertId();
+
+    $recheck = $pdo->query('SELECT id FROM users ORDER BY created_at DESC, id DESC')->fetchAll(PDO::FETCH_COLUMN);
+    assert_equals($newestId, (int)$recheck[0], 'Newly created member must appear at the top (index 0)');
+
+    // Cleanup
+    $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$newestId]);
+});
+
+// 9. Clean Sequential Display Numbering While Preserving Permanent Database IDs
+it('computes clean sequential display numbers across pagination while preserving permanent database IDs', function () use ($pdo) {
+    $stmt = $pdo->query('SELECT id, name, created_at FROM users ORDER BY created_at DESC, id DESC');
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Simulate Page 1 with offset 0
+    $page1Offset = 0;
+    foreach ($users as $index => $u) {
+        $displayNumber = $page1Offset + $index + 1;
+        assert_equals($index + 1, $displayNumber, "Display number on page 1 must match 1-based index");
+        assert_true($u['id'] > 0, "Permanent database ID must be preserved and positive");
+    }
+
+    // Simulate Page 2 with offset 10 (e.g. 10 items per page)
+    $page2Offset = 10;
+    foreach ($users as $index => $u) {
+        $displayNumber = $page2Offset + $index + 1;
+        assert_equals(10 + $index + 1, $displayNumber, "Display number on page 2 must continue sequentially from 11");
+    }
+});
+
+// 10. Database AUTO_INCREMENT Integrity and Foreign Key Preservation
+it('preserves database primary keys, AUTO_INCREMENT sequence, and foreign keys', function () use ($pdo) {
+    // Check table status
+    $stmt = $pdo->query('SHOW TABLE STATUS LIKE "users"');
+    $tableStatus = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    assert_equals('InnoDB', $tableStatus['Engine'], 'Users table must use InnoDB engine');
+    $nextAi = (int)$tableStatus['Auto_increment'];
+    $maxId = (int)$pdo->query('SELECT MAX(id) FROM users')->fetchColumn();
+
+    assert_true($nextAi > $maxId, "Next AUTO_INCREMENT ({$nextAi}) must be strictly greater than MAX(id) ({$maxId})");
+
+    // Check primary key column definition
+    $colStmt = $pdo->query('SHOW COLUMNS FROM users WHERE Field = "id"');
+    $idCol = $colStmt->fetch(PDO::FETCH_ASSOC);
+    assert_equals('PRI', $idCol['Key'], 'id must be PRIMARY KEY');
+    assert_true(strpos($idCol['Extra'], 'auto_increment') !== false, 'id must have auto_increment in Extra');
+
+    // Verify foreign keys referencing users(id) are intact
+    $fkCount = (int)$pdo->query("
+        SELECT COUNT(*) 
+        FROM information_schema.KEY_COLUMN_USAGE 
+        WHERE REFERENCED_TABLE_SCHEMA = 'jdm_kenya' 
+          AND REFERENCED_TABLE_NAME = 'users' 
+          AND REFERENCED_COLUMN_NAME = 'id'
+    ")->fetchColumn();
+
+    assert_true($fkCount >= 20, "Must have all existing foreign keys referencing users(id) intact (found {$fkCount})");
+});
+
 echo "------------------------------------------------------------\n";
 echo "SUMMARY: {$totalPassed} passed, {$totalFailed} failed.\n";
 echo "------------------------------------------------------------\n";

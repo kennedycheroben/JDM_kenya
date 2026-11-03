@@ -251,7 +251,8 @@ ob_start();
                         <table class="table table-bordered table-hover">
                             <thead class="table-light">
                                 <tr>
-                                    <th>No.</th>
+                                    <th style="width: 60px;">No.</th>
+                                    <th style="width: 105px;">Member ID</th>
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>WhatsApp Phone</th>
@@ -265,6 +266,7 @@ ob_start();
                                 <?php foreach ($members as $rowIndex => $member): ?>
                                     <tr>
                                         <td><strong><?= (int)($offset + $rowIndex + 1) ?></strong></td>
+                                        <td><span class="badge bg-light text-dark border">#<?= (int)$member['id'] ?></span></td>
                                         <td><?= escape($member['name']) ?></td>
                                         <td><?= $isAdmin ? escape($member['email']) : escape(maskEmail($member['email'] ?? '')) ?></td>
                                         <td><?= $isAdmin ? escape($member['whatsapp_phone']) : escape(maskPhone($member['whatsapp_phone'] ?? '')) ?></td>

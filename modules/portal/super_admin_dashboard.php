@@ -79,8 +79,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                             error_log("Failed to send Office Bearer rejection notification: " . $e->getMessage());
                         }
                         
-                        // Delete the pending registration
-                        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$targetId]);
+                        // Delete the pending registration safely with transactional assignment cleanup
+                        require_once dirname(__FILE__) . '/../../core/users.php';
+                        deleteUser($pdo, $targetId, true);
                         $msg = 'Office bearer registration rejected and user deleted.';
                     }
                 } elseif ($action === 'approve_missionary') {
@@ -108,7 +109,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         } catch (PDOException $e) {
                             error_log("Failed to send Missionary rejection notification: " . $e->getMessage());
                         }
-                        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$targetId]);
+                        require_once dirname(__FILE__) . '/../../core/users.php';
+                        deleteUser($pdo, $targetId, true);
                         $msg = 'Missionary registration rejected and user deleted.';
                     }
                 } elseif ($action === 'appoint_leader') {
@@ -262,18 +264,20 @@ try {
     $totalUserPages = max(1, (int)ceil($totalUsers / $saPerPage));
 
     // Try the full column list first; if any column doesn't exist, fall back to basic columns
+    // Ordering: Newest registered members first, with id DESC as tiebreaker
     try {
-        $users = $pdo->query("SELECT id, name, email, whatsapp_phone, role, category, is_gbs_leader, is_approved, is_staff, staff_type, created_at FROM users ORDER BY created_at DESC LIMIT {$saPerPage} OFFSET {$saOffset}")->fetchAll(PDO::FETCH_ASSOC);
+        $users = $pdo->query("SELECT id, name, email, whatsapp_phone, role, category, is_gbs_leader, is_approved, is_staff, staff_type, account_status, created_at FROM users ORDER BY created_at DESC, id DESC LIMIT {$saPerPage} OFFSET {$saOffset}")->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         // Fallback: some columns may not exist yet (run migration via /setup.php)
         error_log('Super admin dashboard: full user query failed, falling back: ' . $e->getMessage());
-        $users = $pdo->query("SELECT id, name, email, whatsapp_phone, role, category, created_at FROM users ORDER BY created_at DESC LIMIT {$saPerPage} OFFSET {$saOffset}")->fetchAll(PDO::FETCH_ASSOC);
+        $users = $pdo->query("SELECT id, name, email, whatsapp_phone, role, category, created_at FROM users ORDER BY created_at DESC, id DESC LIMIT {$saPerPage} OFFSET {$saOffset}")->fetchAll(PDO::FETCH_ASSOC);
         // Add default values for missing columns
         foreach ($users as &$u) {
             $u['is_gbs_leader'] = $u['is_gbs_leader'] ?? 0;
             $u['is_approved'] = $u['is_approved'] ?? 1;
             $u['is_staff'] = $u['is_staff'] ?? 0;
             $u['staff_type'] = $u['staff_type'] ?? null;
+            $u['account_status'] = $u['account_status'] ?? 'active';
         }
         unset($u);
     }
@@ -284,7 +288,7 @@ try {
 // =====================================================================
 // OFFICE BEARER & MISSIONARY APPROVAL WORKFLOW
 // =====================================================================
-// Query for pending office bearer (partner) registrations that need approval
+// Query for pending office bearer (partner) registrations that need approval (newest first)
 $pendingPartners = [];
 try {
     $pendingPartners = $pdo->query('
@@ -292,7 +296,7 @@ try {
                industry_profession, partnership_focus, created_at 
         FROM users 
         WHERE category = "partner" AND is_approved = 0 
-        ORDER BY created_at ASC
+        ORDER BY created_at DESC, id DESC
     ')->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     // Columns like employment_status, company_name, etc. may not exist
@@ -302,7 +306,7 @@ try {
             SELECT id, name, email, whatsapp_phone, created_at 
             FROM users 
             WHERE category = "partner" AND is_approved = 0 
-            ORDER BY created_at ASC
+            ORDER BY created_at DESC, id DESC
         ')->fetchAll(PDO::FETCH_ASSOC);
         foreach ($pendingPartners as &$p) {
             $p['employment_status'] = $p['employment_status'] ?? '-';
@@ -316,14 +320,14 @@ try {
     }
 }
 
-// Query for pending missionary registrations that need approval
+// Query for pending missionary registrations that need approval (newest first)
 $pendingMissionaries = [];
 try {
     $pendingMissionaries = $pdo->query('
         SELECT id, name, email, whatsapp_phone, missionary_type, country, created_at 
         FROM users 
         WHERE category = "missionary" AND is_approved = 0 
-        ORDER BY created_at ASC
+        ORDER BY created_at DESC, id DESC
     ')->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log('Pending missionaries query failed (columns may be missing): ' . $e->getMessage());
@@ -332,7 +336,7 @@ try {
             SELECT id, name, email, whatsapp_phone, created_at 
             FROM users 
             WHERE category = "missionary" AND is_approved = 0 
-            ORDER BY created_at ASC
+            ORDER BY created_at DESC, id DESC
         ')->fetchAll(PDO::FETCH_ASSOC);
         foreach ($pendingMissionaries as &$m) {
             $m['missionary_type'] = $m['missionary_type'] ?? '-';
@@ -398,7 +402,8 @@ ob_start();
                 <table class="table table-bordered table-striped table-hover align-middle w-100 mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>ID</th>
+                            <th style="width: 60px;">No.</th>
+                            <th style="width: 105px;">Member ID</th>
                             <th>Name</th>
                             <th>Email</th>
                             <th>WhatsApp</th>
@@ -409,9 +414,10 @@ ob_start();
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($pendingPartners as $partner): ?>
+                        <?php foreach ($pendingPartners as $partnerIndex => $partner): ?>
                             <tr class="table-warning-light" style="background-color: #fffdf5;">
-                                <td>#<?= (int)$partner['id'] ?></td>
+                                <td><strong><?= (int)($partnerIndex + 1) ?></strong></td>
+                                <td><span class="badge bg-light text-dark border">#<?= (int)$partner['id'] ?></span></td>
                                 <td>
                                     <strong><?= escape($partner['name']) ?></strong>
                                     <br>
@@ -477,7 +483,8 @@ ob_start();
                 <table class="table table-bordered table-striped table-hover align-middle w-100 mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>ID</th>
+                            <th style="width: 60px;">No.</th>
+                            <th style="width: 105px;">Member ID</th>
                             <th>Name</th>
                             <th>Email</th>
                             <th>WhatsApp</th>
@@ -488,9 +495,10 @@ ob_start();
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($pendingMissionaries as $m): ?>
+                        <?php foreach ($pendingMissionaries as $missionaryIndex => $m): ?>
                             <tr>
-                                <td>#<?= (int)$m['id'] ?></td>
+                                <td><strong><?= (int)($missionaryIndex + 1) ?></strong></td>
+                                <td><span class="badge bg-light text-dark border">#<?= (int)$m['id'] ?></span></td>
                                 <td><strong><?= escape($m['name']) ?></strong></td>
                                 <td><?= escape($m['email']) ?></td>
                                 <td><?= escape($m['whatsapp_phone'] ?: '-') ?></td>
@@ -546,7 +554,8 @@ ob_start();
             <table class="table table-bordered table-striped table-hover align-middle w-100 mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th>ID</th>
+                        <th style="width: 60px;">No.</th>
+                        <th style="width: 105px;">Member ID</th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>WhatsApp</th>
@@ -559,7 +568,7 @@ ob_start();
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($users as $u): ?>
+                    <?php foreach ($users as $userIndex => $u): ?>
                         <?php
                         $role = $u['role'] ?? 'member';
                         $selfId = (int)($_SESSION['user_id'] ?? 0);
@@ -584,7 +593,8 @@ ob_start();
                         $staffType = $u['staff_type'] ?? '';
                         ?>
                         <tr>
-                            <td>#<?= (int)$u['id'] ?></td>
+                            <td><strong><?= (int)($saOffset + $userIndex + 1) ?></strong></td>
+                            <td><span class="badge bg-light text-dark border">#<?= (int)$u['id'] ?></span></td>
                             <td><?= escape($u['name']) ?></td>
                             <td><?= escape($u['email']) ?></td>
                             <td><?= escape($u['whatsapp_phone']) ?></td>
@@ -630,13 +640,18 @@ ob_start();
                             <td>
                                 <?php
                                 if ($u['category'] === 'partner' || $u['category'] === 'missionary') {
-                                    if ($u['is_approved']) {
+                                    if (!empty($u['is_approved'])) {
                                         echo '<span class="badge bg-success">Approved</span>';
                                     } else {
                                         echo '<span class="badge bg-warning text-dark">Pending</span>';
                                     }
                                 } else {
-                                    echo '<span class="badge bg-secondary">N/A</span>';
+                                    echo '<span class="badge bg-success">Active</span>';
+                                }
+                                if (($u['account_status'] ?? 'active') === 'disabled') {
+                                    echo ' <span class="badge bg-secondary ms-1">Deactivated</span>';
+                                } elseif (($u['account_status'] ?? 'active') === 'suspended') {
+                                    echo ' <span class="badge bg-warning text-dark ms-1">Suspended</span>';
                                 }
                                 ?>
                             </td>
@@ -779,7 +794,10 @@ ob_start();
                                             </form>
                                         </li>
                                         <li>
-                                            <form method="post" onsubmit="return confirm('Delete this user? This cannot be undone.');">
+                                            <a class="dropdown-item" href="delete_member.php?id=<?= $targetId ?>"><i class="bi bi-person-gear"></i> Manage Lifecycle / Delete</a>
+                                        </li>
+                                        <li>
+                                            <form method="post" onsubmit="return confirm('Permanently delete this user and related records? This cannot be undone.');">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="user_id" value="<?= $targetId ?>">
                                                 <input type="hidden" name="action" value="delete_user">
