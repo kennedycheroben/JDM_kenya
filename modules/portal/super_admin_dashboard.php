@@ -2,7 +2,7 @@
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
 
 if (empty($_SESSION['user_role']) || $_SESSION['user_role'] !== 'super_admin') {
-    header('Location: login.php');
+    header('Location: ' . BASE_PATH . '/login.php');
     exit;
 }
 
@@ -205,7 +205,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
                     // If the appointed user is the current session user, redirect to setup
                     if ($targetId === $selfId) {
-                        header('Location: gbs_dashboard.php?new_leader=1');
+                        header('Location: ' . BASE_PATH . '/gbs_dashboard.php?new_leader=1');
                         exit;
                     }
                 } elseif ($action === 'demote_member') {
@@ -502,7 +502,7 @@ ob_start();
                                 <td><strong><?= escape($m['name']) ?></strong></td>
                                 <td><?= escape($m['email']) ?></td>
                                 <td><?= escape($m['whatsapp_phone'] ?: '-') ?></td>
-                                <td><?= escape(str_replace('_', ' ', ucfirst($m['missionary_type'] ?? '-'))) ?></td>
+                                <td><?= escape(str_replace('_', ' ', ucfirst((string)($m['missionary_type'] ?? '-')))) ?></td>
                                 <td><?= escape($m['country'] ?? '-') ?></td>
                                 <td><?= date('M d, Y', strtotime($m['created_at'])) ?></td>
                                 <td>
@@ -545,7 +545,7 @@ ob_start();
 
 <div class="card">
     <div class="card-header bg-dark text-white">
-        <h5 class="mb-0"><i class="bi bi-people"></i> All Users (<?= count($users) ?>)</h5>
+        <h5 class="mb-0"><i class="bi bi-people"></i> All Users (<?= (int)$totalUsers ?>)</h5>
     </div>
     <div class="card-body p-0">
         <!-- table-responsive prevents horizontal viewport overflow on smaller screens -->
@@ -588,9 +588,9 @@ ob_start();
                         
                         $isCampusLeader = in_array('campus_leader', $leaderTypes);
                         $isWorshipLeader = in_array('worship_leader', $leaderTypes);
-                        $isGbsLeader = in_array('gbs_leader', $leaderTypes) || $u['is_gbs_leader'];
-                        $isStaff = $u['is_staff'] ?? 0;
-                        $staffType = $u['staff_type'] ?? '';
+                        $isGbsLeader = in_array('gbs_leader', $leaderTypes) || !empty($u['is_gbs_leader']);
+                        $isStaff = !empty($u['is_staff']);
+                        $staffType = (string)($u['staff_type'] ?? '');
                         ?>
                         <tr>
                             <td><strong><?= (int)($saOffset + $userIndex + 1) ?></strong></td>
@@ -662,7 +662,7 @@ ob_start();
                                         Actions
                                     </button>
                                     <ul class="dropdown-menu" style="min-width: 220px;">
-                                        <li><a class="dropdown-item" href="view_member.php?id=<?= $targetId ?>"><i class="bi bi-eye"></i> View Profile</a></li>
+                                        <li><a class="dropdown-item" href="<?= BASE_PATH ?>/view_member.php?id=<?= $targetId ?>"><i class="bi bi-eye"></i> View Profile</a></li>
                                         <li><hr class="dropdown-divider"></li>
 
                                         <?php if ($role !== 'super_admin' && $targetId !== $selfId): ?>
@@ -794,7 +794,7 @@ ob_start();
                                             </form>
                                         </li>
                                         <li>
-                                            <a class="dropdown-item" href="delete_member.php?id=<?= $targetId ?>"><i class="bi bi-person-gear"></i> Manage Lifecycle / Delete</a>
+                                            <a class="dropdown-item" href="<?= BASE_PATH ?>/delete_member.php?id=<?= $targetId ?>"><i class="bi bi-person-gear"></i> Manage Lifecycle / Delete</a>
                                         </li>
                                         <li>
                                             <form method="post" onsubmit="return confirm('Permanently delete this user and related records? This cannot be undone.');">

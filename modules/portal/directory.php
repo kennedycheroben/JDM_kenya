@@ -2,7 +2,7 @@
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
 
 if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'member' && $_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'super_admin')) {
-    header('Location: login.php');
+    header('Location: ' . BASE_PATH . '/login.php');
     exit;
 }
 
@@ -55,7 +55,13 @@ ob_start();
                 <div class="card h-100 shadow-sm">
                     <div class="card-body d-flex gap-3 align-items-center">
                         <?php if (!empty($m['pfp_path'])): ?>
-                            <img src="<?= escape($m['pfp_path']) ?>" alt="Profile picture" class="rounded-circle" style="width:56px;height:56px;object-fit:cover;">
+                            <?php
+                            $pfpSrc = $m['pfp_path'];
+                            if (!str_starts_with($pfpSrc, 'http://') && !str_starts_with($pfpSrc, 'https://') && !str_starts_with($pfpSrc, BASE_PATH . '/')) {
+                                $pfpSrc = BASE_PATH . '/' . ltrim($pfpSrc, '/');
+                            }
+                            ?>
+                            <img src="<?= escape($pfpSrc) ?>" alt="Profile picture" class="rounded-circle" style="width:56px;height:56px;object-fit:cover;">
                         <?php else: ?>
                             <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width:56px;height:56px;">
                                 <i class="bi bi-person text-secondary" style="font-size:1.5rem;"></i>
@@ -86,7 +92,7 @@ ob_start();
                         <i class="bi bi-chat-dots text-muted"></i>
                     </div>
                     <div class="card-footer bg-transparent">
-                        <a class="btn btn-sm btn-outline-primary w-100" href="chat.php?with=<?= (int)$m['id'] ?>">
+                        <a class="btn btn-sm btn-outline-primary w-100" href="<?= BASE_PATH ?>/chat.php?with=<?= (int)$m['id'] ?>">
                             <i class="bi bi-chat"></i> Message
                         </a>
                     </div>

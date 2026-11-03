@@ -124,7 +124,8 @@ require_once dirname(__DIR__, 2) . '/core/notifications.php';
 $sidebarCounts = get_user_notification_counts($pdo, (int)$user_id, (string)$user_role);
 
 // Dynamic dual-role badge system
-function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $current_page) {
+if (!function_exists('getUserBadge')) {
+    function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $current_page) {
     $roles = [];
     $badge_classes = [];
     $badge_text = '';
@@ -207,16 +208,19 @@ function getUserBadge($userId, $user_role, $user_category, $is_gbs_leader, $curr
         'roles' => $roles,
         'is_dual' => count($roles) > 1
     ];
+    }
 }
 
 // Legacy function for backward compatibility
-function getDisplayRole($user_role, $user_category, $is_gbs_leader, $current_page) {
-    $badge = getUserBadge(0, $user_role, $user_category, $is_gbs_leader, $current_page);
-    return [
-        'role' => $badge['text'],
-        'badge' => $badge['classes'],
-        'priority' => 0
-    ];
+if (!function_exists('getDisplayRole')) {
+    function getDisplayRole($user_role, $user_category, $is_gbs_leader, $current_page) {
+        $badge = getUserBadge(0, $user_role, $user_category, $is_gbs_leader, $current_page);
+        return [
+            'role' => $badge['text'],
+            'badge' => $badge['classes'],
+            'priority' => 0
+        ];
+    }
 }
 
 $display_role = getUserBadge($user_id, $user_role, $user_category, $is_gbs_leader, $current_page);

@@ -20,27 +20,27 @@ if (!function_exists('getAboutSubMenu')) {
             <div class="col-12">
                 <ul class="nav nav-pills justify-content-center justify-content-lg-start gap-2 p-2 bg-white rounded shadow-sm border border-light-subtle">
                     <li class="nav-item">
-                        <a class="btn-neon about-nav-link ' . navActive('about.php') . ' px-3 py-2 fw-semibold rounded" href="about.php">
+                        <a class="btn-neon about-nav-link ' . navActive('about.php') . ' px-3 py-2 fw-semibold rounded" href="' . BASE_PATH . '/about.php">
                             <i class="bi bi-info-circle me-1"></i> Story & Overview
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="btn-neon about-nav-link ' . navActive('about_ministry.php') . ' px-3 py-2 fw-semibold rounded" href="about_ministry.php">
+                        <a class="btn-neon about-nav-link ' . navActive('about_ministry.php') . ' px-3 py-2 fw-semibold rounded" href="' . BASE_PATH . '/about_ministry.php">
                             <i class="bi bi-compass me-1"></i> What Is JDM
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="btn-neon about-nav-link ' . navActive('about_history_spirit.php') . ' px-3 py-2 fw-semibold rounded" href="about_history_spirit.php">
+                        <a class="btn-neon about-nav-link ' . navActive('about_history_spirit.php') . ' px-3 py-2 fw-semibold rounded" href="' . BASE_PATH . '/about_history_spirit.php">
                             <i class="bi bi-clock-history me-1"></i> History & Spirit
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="btn-neon about-nav-link ' . navActive('about_inner_feature.php') . ' px-3 py-2 fw-semibold rounded" href="about_inner_feature.php">
+                        <a class="btn-neon about-nav-link ' . navActive('about_inner_feature.php') . ' px-3 py-2 fw-semibold rounded" href="' . BASE_PATH . '/about_inner_feature.php">
                             <i class="bi bi-door-open me-1"></i> Inner Features
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="btn-neon about-nav-link ' . navActive('about_outer_feature.php') . ' px-3 py-2 fw-semibold rounded" href="about_outer_feature.php">
+                        <a class="btn-neon about-nav-link ' . navActive('about_outer_feature.php') . ' px-3 py-2 fw-semibold rounded" href="' . BASE_PATH . '/about_outer_feature.php">
                             <i class="bi bi-globe me-1"></i> Outer Features
                         </a>
                     </li>
@@ -118,7 +118,7 @@ ob_start();
                     <p class="fst-italic text-secondary small mb-3 border-start border-3 ps-2">
                         <i class="bi-quote me-1"></i>"Remember your Creator in the days of your youth, before the days of trouble come..." <strong>— Ecclesiastes 12:1</strong> (Also: 2 Timothy 2:22)
                     </p>
-                    <a href="sports.php" class="btn btn-sm btn-outline-success mt-2">
+                    <a href="<?= BASE_PATH ?>/sports.php" class="btn btn-sm btn-outline-success mt-2">
                         <i class="bi bi-trophy"></i> Visit Sports Ministry
                     </a>
                     <img src="<?= BASE_PATH ?>/images/african-students.jpg" alt="African youth" class="img-fluid rounded-3 mt-3" style="max-height: 200px; width: 100%; object-fit: cover;">
@@ -182,9 +182,20 @@ ob_start();
 <script>
     function highlightSection(id) {
         // Remove highlight from all cards
-        document.querySelectorAll('.detail-card').forEach(card => {
+        const cards = document.querySelectorAll('.detail-card');
+        cards.forEach(card => {
             card.classList.remove('active-highlight');
         });
+
+        // Center hub represents the unified JDM Community movement
+        if (id === 'center') {
+            cards.forEach(card => card.classList.add('active-highlight'));
+            if (cards.length > 0) {
+                cards[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            return;
+        }
+
         // Add highlight to selected card
         const card = document.getElementById('detail-' + id);
         if (card) {
@@ -226,23 +237,23 @@ if ($isMemberPortal) {
 
     <header id="header" class="header fixed-top">
         <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
-            <a href="index.php" class="logo d-flex align-items-center">
+            <a href="<?= BASE_PATH ?>/index.php" class="logo d-flex align-items-center">
                 <img src="<?= BASE_PATH ?>/images/jdm_logo.png" alt="JDM Kenya Logo" class="logo-img">
                 <h1 class="sitename ms-2">JDM Kenya</h1>
             </a>
             <nav id="navmenu" class="navmenu">
                 <ul>
-                    <li><a href="index.php" class="<?= navActive('index.php') ?>">Home</a></li>
-                    <li><a href="about.php" class="<?= navActive('about.php') ?>">About</a></li>
-                    <li><a href="activities.php" class="<?= navActive('activities.php') ?>">Events</a></li>
-                    <li><a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
-                    <li><a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
+                    <li><a href="<?= BASE_PATH ?>/index.php" class="<?= navActive('index.php') ?>">Home</a></li>
+                    <li><a href="<?= BASE_PATH ?>/about.php" class="<?= navActive('about.php') ?>">About</a></li>
+                    <li><a href="<?= BASE_PATH ?>/activities.php" class="<?= navActive('activities.php') ?>">Events</a></li>
+                    <li><a href="<?= BASE_PATH ?>/resources.php" class="<?= navActive('resources.php') ?>">Resources</a></li>
+                    <li><a href="<?= BASE_PATH ?>/contact.php" class="<?= navActive('contact.php') ?>">Contact</a></li>
                     <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
-                        <li><a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a></li>
+                        <li><a href="<?= BASE_PATH ?>/admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a></li>
                     <?php elseif ($userRole === 'member'): ?>
-                        <li><a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
+                        <li><a href="<?= BASE_PATH ?>/member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a></li>
                     <?php else: ?>
-                        <li><a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a></li>
+                        <li><a href="<?= BASE_PATH ?>/login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a></li>
                     <?php endif; ?>
                 </ul>
                 <button class="hamburger d-xl-none" type="button" aria-label="Toggle mobile menu">
@@ -253,17 +264,17 @@ if ($isMemberPortal) {
     </header>
 
     <nav class="mobile-nav" aria-label="Mobile navigation">
-        <a href="index.php" class="<?= navActive('index.php') ?>">Home</a>
-        <a href="about.php" class="<?= navActive('about.php') ?>">About</a>
-        <a href="activities.php" class="<?= navActive('activities.php') ?>">Events</a>
-        <a href="resources.php" class="<?= navActive('resources.php') ?>">Resources</a>
-        <a href="contact.php" class="<?= navActive('contact.php') ?>">Contact</a>
+        <a href="<?= BASE_PATH ?>/index.php" class="<?= navActive('index.php') ?>">Home</a>
+        <a href="<?= BASE_PATH ?>/about.php" class="<?= navActive('about.php') ?>">About</a>
+        <a href="<?= BASE_PATH ?>/activities.php" class="<?= navActive('activities.php') ?>">Events</a>
+        <a href="<?= BASE_PATH ?>/resources.php" class="<?= navActive('resources.php') ?>">Resources</a>
+        <a href="<?= BASE_PATH ?>/contact.php" class="<?= navActive('contact.php') ?>">Contact</a>
         <?php if ($userRole === 'admin' || $userRole === 'super_admin'): ?>
-            <a href="admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a>
+            <a href="<?= BASE_PATH ?>/admin_dashboard.php" class="btn btn-warning btn-sm px-3">Dashboard</a>
         <?php elseif ($userRole === 'member'): ?>
-            <a href="member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a>
+            <a href="<?= BASE_PATH ?>/member_dashboard.php" class="btn btn-outline-light btn-sm px-3">Member Portal</a>
         <?php else: ?>
-            <a href="login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a>
+            <a href="<?= BASE_PATH ?>/login.php" class="btn btn-outline-light btn-sm px-3">Sign In</a>
         <?php endif; ?>
     </nav>
 
