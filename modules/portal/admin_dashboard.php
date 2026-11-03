@@ -17,6 +17,81 @@ $tab = isset($_GET['tab']) ? $_GET['tab'] : 'dashboard';
 
 ensureContactMessagesTable($pdo);
 
+// Helper to validate and store an uploaded image file
+function handleUploadedImage(array $file, string $subDir, string $prefix, string &$errorOut): ?string {
+    $errorOut = '';
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE || empty($file['name'])) {
+        return null;
+    }
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $errorOut = 'Image upload failed. Please try again.';
+        return null;
+    }
+    $maxSize = 5 * 1024 * 1024; // 5MB
+    if (($file['size'] ?? 0) > $maxSize) {
+        $errorOut = 'Image file is too large. Maximum allowed size is 5MB.';
+        return null;
+    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+    if (!in_array($ext, $allowedExt, true)) {
+        $errorOut = 'Invalid image format. Only JPG, PNG, or WEBP files are allowed.';
+        return null;
+    }
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+        $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!in_array($mime, $allowedMime, true)) {
+            $errorOut = 'Invalid image file content. Please upload a valid JPG, PNG, or WEBP image.';
+            return null;
+        }
+    }
+    $cleanSubDir = trim($subDir, '/') . '/';
+    $destinationDir = UPLOAD_DIR . $cleanSubDir;
+    if (!is_dir($destinationDir)) {
+        @mkdir($destinationDir, 0777, true);
+        @chmod($destinationDir, 0777);
+    }
+    if (!is_writable($destinationDir)) {
+        @chmod($destinationDir, 0777);
+    }
+    if (!is_dir($destinationDir) || !is_writable($destinationDir)) {
+        $errorOut = 'Upload directory is not writable. Please check permissions for uploads/' . $cleanSubDir;
+        return null;
+    }
+    $safeName = basename($file['name']);
+    $targetName = uniqid($prefix, true) . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $safeName);
+    $destination = $destinationDir . $targetName;
+    if (!move_uploaded_file($file['tmp_name'], $destination)) {
+        $errorOut = 'Unable to save the uploaded image. Please try again.';
+        return null;
+    }
+    return 'uploads/' . $cleanSubDir . $targetName;
+}
+
+// Helper to safely delete an old uploaded file within UPLOAD_DIR
+function deleteUploadedFileIfLocal(?string $relativePath, string $expectedSubDir): void {
+    if (empty($relativePath) || !is_string($relativePath)) {
+        return;
+    }
+    $cleanRel = ltrim($relativePath, '/');
+    $expectedPrefix = 'uploads/' . trim($expectedSubDir, '/') . '/';
+    if (strpos($cleanRel, $expectedPrefix) !== 0) {
+        return;
+    }
+    $subPath = substr($cleanRel, strlen('uploads/'));
+    $fullPath = UPLOAD_DIR . $subPath;
+    $realUploadDir = realpath(UPLOAD_DIR);
+    $realFile = realpath($fullPath);
+    if ($realUploadDir && $realFile && strpos($realFile, $realUploadDir . DIRECTORY_SEPARATOR) === 0 && is_file($realFile)) {
+        @unlink($realFile);
+    }
+}
+
 // Handle form submissions
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     require_csrf();
@@ -26,19 +101,35 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $title = trim($_POST['title'] ?? '');
         $date = trim($_POST['date'] ?? '');
         $content = trim($_POST['content'] ?? '');
-        $image = trim($_POST['image'] ?? '');
+        $uploadError = '';
+        $imagePath = null;
 
-        if ($title && $date && $content) {
+        if (!empty($_FILES['activity_image']['name']) || (($_FILES['activity_image']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE)) {
+            $imagePath = handleUploadedImage($_FILES['activity_image'], 'activities', 'act_', $uploadError);
+        }
+
+        if ($uploadError !== '') {
+            $message = $uploadError;
+            $tab = 'activities';
+        } elseif ($title && $date && $content) {
             try {
                 $stmt = $pdo->prepare('INSERT INTO activities (title, date, content, image, created_by) VALUES (?, ?, ?, ?, ?)');
-                $stmt->execute([$title, $date, $content, $image, $_SESSION['user_id']]);
+                $stmt->execute([$title, $date, $content, $imagePath, $_SESSION['user_id']]);
                 $message = 'Activity added successfully.';
             } catch (PDOException $e) {
+                if ($imagePath) {
+                    deleteUploadedFileIfLocal($imagePath, 'activities');
+                }
                 error_log('Admin dashboard add activity error: ' . $e->getMessage());
                 $message = 'A database error occurred while saving the activity. Please try again.';
             }
+            $tab = 'activities';
         } else {
+            if ($imagePath) {
+                deleteUploadedFileIfLocal($imagePath, 'activities');
+            }
             $message = 'Please complete all required fields for the activity.';
+            $tab = 'activities';
         }
     }
 
@@ -47,24 +138,62 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $title = trim($_POST['title'] ?? '');
         $date = trim($_POST['date'] ?? '');
         $content = trim($_POST['content'] ?? '');
-        $image = trim($_POST['image'] ?? '');
+        $removeImage = !empty($_POST['remove_image']);
 
         if ($id && $title && $date && $content) {
-            $stmt = $pdo->prepare('UPDATE activities SET title = ?, date = ?, content = ?, image = ? WHERE id = ?');
-            $stmt->execute([$title, $date, $content, $image, $id]);
-            $message = 'Activity updated successfully.';
+            $existingStmt = $pdo->prepare('SELECT image FROM activities WHERE id = ? LIMIT 1');
+            $existingStmt->execute([$id]);
+            $existingRow = $existingStmt->fetch(PDO::FETCH_ASSOC);
+            $currentImage = $existingRow['image'] ?? null;
+
+            $uploadError = '';
+            $newImagePath = null;
+            $hasNewUpload = !empty($_FILES['activity_image']['name']) || (($_FILES['activity_image']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
+
+            if ($hasNewUpload) {
+                $newImagePath = handleUploadedImage($_FILES['activity_image'], 'activities', 'act_', $uploadError);
+            }
+
+            if ($uploadError !== '') {
+                $message = $uploadError;
+            } else {
+                $finalImage = $currentImage;
+                if ($newImagePath !== null) {
+                    $finalImage = $newImagePath;
+                } elseif ($removeImage) {
+                    $finalImage = null;
+                }
+
+                $stmt = $pdo->prepare('UPDATE activities SET title = ?, date = ?, content = ?, image = ? WHERE id = ?');
+                $stmt->execute([$title, $date, $content, $finalImage, $id]);
+
+                if (($newImagePath !== null || $removeImage) && !empty($currentImage) && $currentImage !== $finalImage) {
+                    deleteUploadedFileIfLocal($currentImage, 'activities');
+                }
+                $message = 'Activity updated successfully.';
+            }
         } else {
             $message = 'Please provide valid activity details.';
         }
+        $tab = 'activities';
     }
 
     if ($action === 'delete_activity') {
         $id = intval($_POST['activity_id'] ?? 0);
         if ($id) {
+            $existingStmt = $pdo->prepare('SELECT image FROM activities WHERE id = ? LIMIT 1');
+            $existingStmt->execute([$id]);
+            $existingRow = $existingStmt->fetch(PDO::FETCH_ASSOC);
+
             $stmt = $pdo->prepare('DELETE FROM activities WHERE id = ?');
             $stmt->execute([$id]);
+
+            if (!empty($existingRow['image'])) {
+                deleteUploadedFileIfLocal($existingRow['image'], 'activities');
+            }
             $message = 'Activity deleted successfully.';
         }
+        $tab = 'activities';
     }
 
     if ($action === 'upload_resource' && !empty($_FILES['resource_file']['name'])) {
@@ -84,7 +213,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $targetName = uniqid('jdm_', true) . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $safeName);
             $destinationDir = UPLOAD_DIR . 'resources/';
             if (!is_dir($destinationDir)) {
-                @mkdir($destinationDir, 0775, true);
+                @mkdir($destinationDir, 0777, true);
+                @chmod($destinationDir, 0777);
+            }
+            if (!is_writable($destinationDir)) {
+                @chmod($destinationDir, 0777);
             }
             if (!is_dir($destinationDir) || !is_writable($destinationDir)) {
                 $message = 'Upload directory is not writable. Please fix permissions for uploads/resources/.';
@@ -131,36 +264,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
     }
 
-    if ($action === 'upload_gallery' && !empty($_FILES['gallery_image']['name'])) {
-        $file = $_FILES['gallery_image'];
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        $allowed = ['jpg','jpeg','png','webp'];
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-            $message = 'Gallery upload failed. Please try again.';
-        } elseif (!in_array($ext, $allowed, true)) {
-            $message = 'Gallery accepts JPG, PNG, or WEBP images only.';
+    if ($action === 'upload_gallery') {
+        if (empty($_FILES['gallery_image']['name']) && (($_FILES['gallery_image']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE)) {
+            $message = 'Please select an image file to upload.';
         } else {
-            $destinationDir = UPLOAD_DIR . 'gallery/';
-            if (!is_dir($destinationDir)) {
-                @mkdir($destinationDir, 0775, true);
-            }
-            $safeName = basename($file['name']);
-            $targetName = uniqid('gal_', true) . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $safeName);
-            $destination = $destinationDir . $targetName;
-            if (move_uploaded_file($file['tmp_name'], $destination)) {
+            $uploadError = '';
+            $galleryPath = handleUploadedImage($_FILES['gallery_image'], 'gallery', 'gal_', $uploadError);
+            if ($uploadError !== '') {
+                $message = $uploadError;
+            } elseif ($galleryPath !== null) {
                 $title = trim($_POST['gallery_title'] ?? '');
                 try {
                     $stmt = $pdo->prepare('INSERT INTO gallery_images (title, file_path, uploaded_by) VALUES (?, ?, ?)');
-                    $stmt->execute([$title !== '' ? $title : null, 'uploads/gallery/' . $targetName, $_SESSION['user_id']]);
+                    $stmt->execute([$title !== '' ? $title : null, $galleryPath, $_SESSION['user_id']]);
                     $message = 'Gallery image uploaded successfully.';
                 } catch (PDOException $e) {
-                    error_log('Admin dashboard upload resource error: ' . $e->getMessage());
-                    $message = 'A database error occurred while saving the resource. Please try again.';
+                    deleteUploadedFileIfLocal($galleryPath, 'gallery');
+                    error_log('Admin dashboard upload gallery error: ' . $e->getMessage());
+                    $message = 'A database error occurred while saving the gallery image. Please try again.';
                 }
-            } else {
-                $message = 'Unable to save the gallery image.';
             }
         }
+        $tab = 'gallery';
     }
 
     if ($action === 'mark_contact_read') {
@@ -519,24 +644,46 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                     <h5 class="mb-0"><i class="bi bi-plus-circle"></i> <?= $editing ? 'Edit Activity' : 'Add New Activity' ?></h5>
                 </div>
                 <div class="card-body">
-                    <form method="post" class="needs-validation">
+                    <form method="post" enctype="multipart/form-data" class="needs-validation">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="<?= $editing ? 'update_activity' : 'add_activity' ?>">
                         <?php if ($editing): ?>
                             <input type="hidden" name="activity_id" value="<?= $editing['id'] ?>">
                         <?php endif; ?>
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-8 mb-3">
                                 <label class="form-label">Title</label>
                                 <input type="text" name="title" class="form-control" value="<?= escape($editing['title'] ?? '') ?>" required>
                             </div>
-                            <div class="col-md-3 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">Date</label>
                                 <input type="date" name="date" class="form-control" value="<?= escape($editing['date'] ?? '') ?>" required>
                             </div>
-                            <div class="col-md-3 mb-3">
-                                <label class="form-label">Image URL</label>
-                                <input type="url" name="image" class="form-control" value="<?= escape($editing['image'] ?? '') ?>" placeholder="Optional">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Activity Image (Optional)</label>
+                                <input type="file" name="activity_image" class="form-control" accept="image/png,image/jpeg,image/webp">
+                                <small class="text-muted d-block mt-1">JPG, PNG, or WEBP (Max 5MB)</small>
+                                <?php
+                                $editingImageExists = !empty($editing['image']) && is_file(dirname(__DIR__, 2) . '/' . ltrim($editing['image'], '/'));
+                                if (!empty($editing['image'])):
+                                ?>
+                                    <div class="mt-2 d-flex align-items-center gap-2 p-2 bg-light rounded border">
+                                        <?php if ($editingImageExists): ?>
+                                            <img src="<?= escape($editing['image']) ?>" alt="Current activity image" class="rounded" style="width: 48px; height: 48px; object-fit: cover;">
+                                        <?php else: ?>
+                                            <div class="rounded bg-secondary-subtle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                                <i class="bi bi-image text-secondary"></i>
+                                            </div>
+                                        <?php endif; ?>
+                                        <div class="flex-grow-1 small">
+                                            <div class="text-truncate"><?= escape(basename($editing['image'])) ?></div>
+                                            <div class="form-check mb-0">
+                                                <input class="form-check-input" type="checkbox" name="remove_image" value="1" id="removeActivityImage">
+                                                <label class="form-check-label text-danger" for="removeActivityImage">Remove current image</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="row">
@@ -567,7 +714,7 @@ if (isset($_GET['new_admin']) && $is_link_valid):
                             <?php foreach ($activities as $activity): ?>
                                 <div class="col-md-6 col-lg-4">
                                     <div class="card h-100 shadow-sm">
-                                        <?php if ($activity['image']): ?>
+                                        <?php if (!empty($activity['image']) && is_file(dirname(__DIR__, 2) . '/' . ltrim($activity['image'], '/'))): ?>
                                             <img src="<?= escape($activity['image']) ?>" class="card-img-top" alt="Activity" style="height: 150px; object-fit: cover;">
                                         <?php else: ?>
                                             <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 150px;">

@@ -72,43 +72,54 @@ if (asCursor && asCursorBlur && window.innerWidth > 768) {
 }
 
 /* ========== HERO ANIMATIONS ========== */
-const asHeroTL = gsap.timeline({ defaults: { ease: 'power4.out' } });
+if (document.querySelector('.as-hero-title')) {
+  const asHeroTL = gsap.timeline({ defaults: { ease: 'power4.out' } });
 
-asHeroTL
-  .from('.as-hero-title .line .word', {
-    y: 120,
-    rotation: 5,
-    opacity: 0,
-    stagger: 0.12,
-    duration: 1.2,
-    scroller: asWrapper || window,
-  })
-  .from('.as-hero-subtitle', {
-    y: 40,
-    opacity: 0,
-    duration: 0.8,
-    scroller: asWrapper || window,
-  }, '-=0.6')
-  .from('.as-hero-cta a', {
-    y: 30,
-    opacity: 0,
-    stagger: 0.15,
-    duration: 0.6,
-    scroller: asWrapper || window,
-  }, '-=0.4')
-  .from('.as-hero-image-wrapper img', {
-    scale: 1.4,
-    opacity: 0,
-    duration: 1.5,
-    ease: 'power3.out',
-    scroller: asWrapper || window,
-  }, '-=1.2')
-  .from('.as-hero-accent', {
-    opacity: 0,
-    scale: 0.8,
-    duration: 0.8,
-    scroller: asWrapper || window,
-  }, '-=0.8');
+  if (document.querySelector('.as-hero-title .line .word')) {
+    asHeroTL.from('.as-hero-title .line .word', {
+      y: 120,
+      rotation: 5,
+      opacity: 0,
+      stagger: 0.12,
+      duration: 1.2,
+      scroller: asWrapper || window,
+    });
+  }
+  if (document.querySelector('.as-hero-subtitle')) {
+    asHeroTL.from('.as-hero-subtitle', {
+      y: 40,
+      opacity: 0,
+      duration: 0.8,
+      scroller: asWrapper || window,
+    }, '-=0.6');
+  }
+  if (document.querySelector('.as-hero-cta a')) {
+    asHeroTL.from('.as-hero-cta a', {
+      y: 30,
+      opacity: 0,
+      stagger: 0.15,
+      duration: 0.6,
+      scroller: asWrapper || window,
+    }, '-=0.4');
+  }
+  if (document.querySelector('.as-hero-image-wrapper img')) {
+    asHeroTL.from('.as-hero-image-wrapper img', {
+      scale: 1.4,
+      opacity: 0,
+      duration: 1.5,
+      ease: 'power3.out',
+      scroller: asWrapper || window,
+    }, '-=1.2');
+  }
+  if (document.querySelector('.as-hero-accent')) {
+    asHeroTL.from('.as-hero-accent', {
+      opacity: 0,
+      scale: 0.8,
+      duration: 0.8,
+      scroller: asWrapper || window,
+    }, '-=0.8');
+  }
+}
 
 /* ========== SCROLL TRIGGER ANIMATIONS ========== */
 

@@ -274,6 +274,20 @@ it('route integrity - canonical member dashboard exists and members_portal redir
     }
 });
 
+it('image uploads - activities and gallery use file inputs rather than image URLs', function() {
+    $root = dirname(__DIR__);
+    $adminDash = file_get_contents($root . '/modules/portal/admin_dashboard.php');
+    if (strpos($adminDash, 'type="url" name="image"') !== false) {
+        throw new RuntimeException('Activity form must not use a URL input for images');
+    }
+    if (strpos($adminDash, 'type="file" name="activity_image"') === false) {
+        throw new RuntimeException('Activity form must use a file input (activity_image) for image uploads');
+    }
+    if (strpos($adminDash, 'type="file" name="gallery_image"') === false) {
+        throw new RuntimeException('Gallery form must use a file input (gallery_image) for image uploads');
+    }
+});
+
 echo "\n------------------------------------------------------------\n";
 echo "SUMMARY: $passed passed, $failed failed.\n";
 echo "------------------------------------------------------------\n";

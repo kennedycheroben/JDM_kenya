@@ -4,3 +4,5 @@ deployment:
     - export DEPLOYPATH=/home/xqtrqexj/public_html
     - /bin/cp -R * $DEPLOYPATH
     - /bin/cp .htaccess $DEPLOYPATH
+    - /bin/mkdir -p $DEPLOYPATH/uploads/activities $DEPLOYPATH/uploads/gallery $DEPLOYPATH/uploads/resources $DEPLOYPATH/uploads/profiles $DEPLOYPATH/uploads/gbs_pfps $DEPLOYPATH/uploads/gbs_resources
+    - /bin/chmod -R 775 $DEPLOYPATH/uploads
