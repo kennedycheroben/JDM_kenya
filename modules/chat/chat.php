@@ -140,13 +140,24 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'send') {
 }
 
 $isSuperAdmin = ($_SESSION['user_role'] ?? '') === 'super_admin';
-if ($isSuperAdmin) {
-    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND (account_status IS NULL OR account_status != 'suspended') ORDER BY name ASC");
-} else {
-    $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND category != 'partner' AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY name ASC");
+try {
+    if ($isSuperAdmin) {
+        $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND (account_status IS NULL OR account_status NOT IN ('suspended', 'deleted')) ORDER BY name ASC");
+    } else {
+        $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND category != 'partner' AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY name ASC");
+    }
+    $peopleStmt->execute([$meId]);
+    $people = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log('chat recipient query fallback: ' . $e->getMessage());
+    if ($isSuperAdmin) {
+        $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? ORDER BY name ASC");
+    } else {
+        $peopleStmt = $pdo->prepare("SELECT id, name, pfp_path FROM users WHERE id <> ? AND category != 'partner' ORDER BY name ASC");
+    }
+    $peopleStmt->execute([$meId]);
+    $people = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
 }
-$peopleStmt->execute([$meId]);
-$people = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $with = (int)($_GET['with'] ?? 0);
 if ($with <= 0 && !empty($people)) {

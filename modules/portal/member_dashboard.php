@@ -3,8 +3,8 @@ require_once dirname(__FILE__) . '/../../core/db_connect.php';
 require_once dirname(__FILE__) . '/../../core/downloads.php';
 
 // Check member access
-if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'member' && $_SESSION['user_role'] !== 'admin')) {
-    header('Location: login.php');
+if (empty($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['member', 'admin', 'super_admin'], true)) {
+    header('Location: ' . BASE_PATH . '/login.php');
     exit;
 }
 

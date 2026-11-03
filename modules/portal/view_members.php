@@ -46,17 +46,22 @@ if (!empty($_GET['deleted'])) {
         $error_msg = 'An error occurred while processing the request.';
     }
 }
-$selected_category = isset($_GET['category']) ? $_GET['category'] : 'all';
+$selected_category = isset($_GET['category']) ? strtolower(trim((string)$_GET['category'])) : 'all';
 
 // Get all members (admins can manage members only; JDM Leaders can view all)
 $is_super_admin = ($_SESSION['user_role'] === 'super_admin');
+
+$allowed_categories = ['all', 'student', 'associate', 'partner', 'missionary', 'sports_ministry', 'other'];
+if (!in_array($selected_category, $allowed_categories, true)) {
+    $selected_category = 'all';
+}
 
 if ($selected_category === 'partner' && !$is_super_admin) {
     header('Location: view_members.php');
     exit;
 }
 
-if ($selected_category === 'missionary' && !$is_super_admin) {
+if ($selected_category === 'missionary' && !$isAdmin) {
     header('Location: view_members.php');
     exit;
 }
@@ -65,19 +70,22 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
 $offset = ($page - 1) * $perPage;
 
-$countQuery = 'SELECT COUNT(*) FROM users WHERE 1=1';
-$query = 'SELECT id, name, email, whatsapp_phone, category, role, account_status, created_at FROM users WHERE 1=1';
-$params = [];
-
-if (!$isAdmin) {
-    $countQuery .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
-    $query .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
+// Determine visibility filter based on viewer role while including all member roles (member, admin, super_admin)
+if ($is_super_admin) {
+    $visibilityWhere = "role IN ('member','admin','super_admin') AND (account_status IS NULL OR account_status != 'deleted')";
+    $visibilityFallbackWhere = "role IN ('member','admin','super_admin')";
+} elseif ($isAdmin) {
+    $visibilityWhere = "role IN ('member','admin','super_admin') AND category != 'partner' AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status != 'deleted')";
+    $visibilityFallbackWhere = "role IN ('member','admin','super_admin') AND category != 'partner'";
 } else {
-    if (!$is_super_admin) {
-        $countQuery .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
-        $query .= " AND role = 'member' AND category NOT IN ('partner', 'missionary')";
-    }
+    $safeViewerId = (int)$viewerId;
+    $visibilityWhere = "role IN ('member','admin','super_admin') AND (category NOT IN ('partner', 'missionary') OR id = {$safeViewerId}) AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active')";
+    $visibilityFallbackWhere = "role IN ('member','admin','super_admin') AND (category NOT IN ('partner', 'missionary') OR id = {$safeViewerId})";
 }
+
+$countQuery = "SELECT COUNT(*) FROM users WHERE {$visibilityWhere}";
+$query = "SELECT id, name, email, whatsapp_phone, category, role, account_status, created_at FROM users WHERE {$visibilityWhere}";
+$params = [];
 
 if ($selected_category !== 'all') {
     $countQuery .= ' AND category = ?';
@@ -87,39 +95,45 @@ if ($selected_category !== 'all') {
 
 $query .= ' ORDER BY created_at DESC, id DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
 
-$stmtCount = $pdo->prepare($countQuery);
-$stmtCount->execute($params);
-$totalMembers = (int)$stmtCount->fetchColumn();
-$totalPages = max(1, (int)ceil($totalMembers / $perPage));
+try {
+    $stmtCount = $pdo->prepare($countQuery);
+    $stmtCount->execute($params);
+    $totalMembers = (int)$stmtCount->fetchColumn();
+    $totalPages = max(1, (int)ceil($totalMembers / $perPage));
 
-$stmt = $pdo->prepare($query);
-$stmt->execute($params);
-$members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare($query);
+    $stmt->execute($params);
+    $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log('view_members query fallback: ' . $e->getMessage());
+    $fallbackCount = "SELECT COUNT(*) FROM users WHERE {$visibilityFallbackWhere}" . ($selected_category !== 'all' ? ' AND category = ?' : '');
+    $fallbackQuery = "SELECT id, name, email, whatsapp_phone, category, role, created_at FROM users WHERE {$visibilityFallbackWhere}" . ($selected_category !== 'all' ? ' AND category = ?' : '') . ' ORDER BY created_at DESC, id DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
+    $stmtCount = $pdo->prepare($fallbackCount);
+    $stmtCount->execute($params);
+    $totalMembers = (int)$stmtCount->fetchColumn();
+    $totalPages = max(1, (int)ceil($totalMembers / $perPage));
 
-// Get category statistics (members only, adjusted by role permissions)
+    $stmt = $pdo->prepare($fallbackQuery);
+    $stmt->execute($params);
+    $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($members as &$mRow) {
+        $mRow['account_status'] = $mRow['account_status'] ?? 'active';
+    }
+    unset($mRow);
+}
+
+// Get category statistics across all valid roles (member, admin, super_admin), respecting viewer visibility rules
 $stats = ['students' => 0, 'associates' => 0, 'partners' => 0, 'missionaries' => 0, 'total' => 0];
 try {
-    if ($isAdmin) {
-        if ($is_super_admin) {
-            $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
-            $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
-            $stats['partners'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='partner'")->fetch(PDO::FETCH_ASSOC)['c'];
-            $stats['missionaries'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='missionary'")->fetch(PDO::FETCH_ASSOC)['c'];
-            $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member'")->fetch(PDO::FETCH_ASSOC)['c'];
-        } else {
-            $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
-            $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
-            $stats['partners'] = 0;
-            $stats['missionaries'] = 0;
-            $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category NOT IN ('partner', 'missionary')")->fetch(PDO::FETCH_ASSOC)['c'];
-        }
-    } else {
-        $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
-        $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
-        $stats['partners'] = 0;
-        $stats['missionaries'] = 0;
-        $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE role='member' AND category NOT IN ('partner','missionary')")->fetch(PDO::FETCH_ASSOC)['c'];
-    }
+    $stats['students'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE {$visibilityWhere} AND category='student'")->fetch(PDO::FETCH_ASSOC)['c'];
+    $stats['associates'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE {$visibilityWhere} AND category='associate'")->fetch(PDO::FETCH_ASSOC)['c'];
+    $stats['partners'] = $is_super_admin
+        ? (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE {$visibilityWhere} AND category='partner'")->fetch(PDO::FETCH_ASSOC)['c']
+        : 0;
+    $stats['missionaries'] = $isAdmin
+        ? (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE {$visibilityWhere} AND category='missionary'")->fetch(PDO::FETCH_ASSOC)['c']
+        : 0;
+    $stats['total'] = (int)$pdo->query("SELECT COUNT(*) as c FROM users WHERE {$visibilityWhere}")->fetch(PDO::FETCH_ASSOC)['c'];
 } catch (Throwable $e) {
     error_log("Stats query error: " . $e->getMessage());
 }
@@ -172,7 +186,7 @@ ob_start();
         </div>
     </div>
     <?php endif; ?>
-    <?php if ($is_super_admin): ?>
+    <?php if ($isAdmin): ?>
     <div class="col-md-3 mb-3">
         <div class="card stat-card">
             <i class="bi bi-globe text-info"></i>
@@ -203,11 +217,14 @@ ob_start();
                 <i class="bi bi-briefcase-fill"></i> Office Bearers
             </a>
             <?php endif; ?>
-            <?php if ($is_super_admin): ?>
+            <?php if ($isAdmin): ?>
             <a href="view_members.php?category=missionary" class="category-btn <?= $selected_category === 'missionary' ? 'active' : '' ?>">
                 <i class="bi bi-globe"></i> Missionaries
             </a>
             <?php endif; ?>
+            <a href="view_members.php?category=sports_ministry" class="category-btn <?= $selected_category === 'sports_ministry' ? 'active' : '' ?>">
+                <i class="bi bi-trophy"></i> Sports Ministry
+            </a>
             <a href="view_members.php?category=other" class="category-btn <?= $selected_category === 'other' ? 'active' : '' ?>">
                 <i class="bi bi-person"></i> Others
             </a>
@@ -238,9 +255,10 @@ ob_start();
                     <i class="bi bi-table"></i>
                     <?php 
                     if ($selected_category === 'all') {
-                        echo "All Members (" . count($members) . ")";
+                        echo "All Members (" . (int)$totalMembers . ")";
                     } else {
-                        echo ucfirst($selected_category) . " Members (" . count($members) . ")";
+                        $catHeaderLabel = str_replace('_', ' ', ucfirst($selected_category));
+                        echo escape($catHeaderLabel) . " Members (" . (int)$totalMembers . ")";
                     }
                     ?>
                 </h5>
@@ -287,6 +305,9 @@ ob_start();
                                                         break;
                                                     case 'partner':
                                                         $badgeDisplay = ['class' => 'bg-warning text-dark', 'icon' => '<i class="bi bi-briefcase-fill"></i> Office Bearer'];
+                                                        break;
+                                                    case 'sports_ministry':
+                                                        $badgeDisplay = ['class' => 'bg-primary', 'icon' => '<i class="bi bi-trophy"></i> Sports Ministry'];
                                                         break;
                                                     case 'other':
                                                         $badgeDisplay = ['class' => 'bg-secondary', 'icon' => 'Member'];

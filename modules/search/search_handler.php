@@ -58,8 +58,24 @@ try {
     $announcementsDateColumn = searchColumnExists($pdo, 'announcements', 'date_created') ? 'date_created' : 'date_posted';
 
     // --- User Search ---
-    // Find users by name, email, or WhatsApp phone. JDM Leaders see all roles.
+    // Find users by name, email, or WhatsApp phone respecting directory visibility rules.
     $isAdminViewer = ($user_role === 'admin' || $user_role === 'super_admin') ? 1 : 0;
+    $isSuperAdminViewer = ($user_role === 'super_admin') ? 1 : 0;
+    $usersHasAccountStatus = searchColumnExists($pdo, 'users', 'account_status');
+    $usersHasIsApproved = searchColumnExists($pdo, 'users', 'is_approved');
+
+    $userTargetUrl = $isAdminViewer ? "CONCAT('view_member.php?id=', id)" : "CONCAT('chat.php?with=', id)";
+    $accountStatusFilter = $usersHasAccountStatus
+        ? ($isSuperAdminViewer
+            ? "AND (account_status IS NULL OR account_status != 'deleted')"
+            : ($isAdminViewer
+                ? "AND (account_status IS NULL OR account_status != 'deleted')"
+                : "AND (account_status IS NULL OR account_status = 'active')"))
+        : '';
+    $approvalFilter = ($usersHasIsApproved && !$isSuperAdminViewer)
+        ? 'AND (is_approved = 1 OR is_approved IS NULL)'
+        : '';
+
     $stmt = $pdo->prepare("
         SELECT 
             id,
@@ -67,12 +83,15 @@ try {
             email as description,
             role as metadata,
             'users' as type,
-            CONCAT('view_member.php?id=', id) as url,
+            {$userTargetUrl} as url,
             pfp_path as avatar
         FROM users 
         WHERE (name LIKE ? OR email LIKE ? OR whatsapp_phone LIKE ?)
-        AND (role != 'super_admin' OR ? = 1)
-        AND (category NOT IN ('partner', 'missionary') OR ? = 1)
+        AND role IN ('member', 'admin', 'super_admin')
+        AND (category != 'partner' OR ? = 1)
+        AND (category != 'missionary' OR ? = 1)
+        {$approvalFilter}
+        {$accountStatusFilter}
         ORDER BY 
             CASE 
                 WHEN name LIKE ? THEN 1
@@ -85,7 +104,7 @@ try {
     $searchPattern = "%{$query}%";
     $stmt->execute([
         $searchPattern, $searchPattern, $searchPattern,
-        $user_role === 'super_admin' ? 1 : 0,
+        $isSuperAdminViewer,
         $isAdminViewer,
         $query . '%', $query . '%'
     ]);

@@ -9,16 +9,28 @@ if (empty($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'member' && $_S
 $is_super_admin = ($_SESSION['user_role'] === 'super_admin');
 $can_view_contact = in_array($_SESSION['user_role'] ?? '', ['admin', 'super_admin']);
 $user_role = $_SESSION['user_role'] ?? 'member';
+$viewerId = (int)($_SESSION['user_id'] ?? 0);
 
-$sort = ($_GET['sort'] ?? '') === 'newest' ? 'newest' : 'name';
+$sort = ($_GET['sort'] ?? 'newest') === 'name' ? 'name' : 'newest';
 $orderClause = ($sort === 'newest') ? 'created_at DESC, id DESC' : 'name ASC, id DESC';
 
-if ($user_role === 'super_admin') {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND (account_status IS NULL OR account_status != 'deleted') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
-} elseif ($user_role === 'admin') {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' AND (account_status IS NULL OR account_status != 'deleted') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
-} else {
-    $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND category NOT IN ('partner', 'missionary') AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
+try {
+    if ($user_role === 'super_admin') {
+        $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND (account_status IS NULL OR account_status != 'deleted') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
+    } elseif ($user_role === 'admin') {
+        $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status != 'deleted') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND (category NOT IN ('partner', 'missionary') OR id = {$viewerId}) AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (PDOException $e) {
+    error_log('directory query fallback: ' . $e->getMessage());
+    if ($user_role === 'super_admin') {
+        $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
+    } elseif ($user_role === 'admin') {
+        $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND category != 'partner' ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $members = $pdo->query("SELECT id, name, whatsapp_phone, pfp_path, created_at FROM users WHERE role IN ('member','admin','super_admin') AND (category NOT IN ('partner', 'missionary') OR id = {$viewerId}) ORDER BY {$orderClause}")->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 
 ob_start();

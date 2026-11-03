@@ -631,6 +631,9 @@ ob_start();
                                     case 'missionary':
                                         echo '<span class="badge text-white" style="background: linear-gradient(135deg, #6366f1, #a855f7) !important; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 2px 4px rgba(168,85,247,0.25);"><i class="bi bi-globe2"></i> Missionary</span>';
                                         break;
+                                    case 'sports_ministry':
+                                        echo '<span class="badge bg-primary"><i class="bi bi-trophy"></i> Sports Ministry</span>';
+                                        break;
                                     default:
                                         echo '<span class="badge bg-secondary">Member</span>';
                                         break;

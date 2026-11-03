@@ -43,9 +43,11 @@ try {
             u.company_name, u.industry_profession, u.partnership_focus,
             u.contribution_phone, u.missionary_type, u.country,
             u.is_staff, u.staff_type,
+            s.campus_name AS student_campus,
             a.graduation_year AS assoc_grad_year,
             a.current_profession AS assoc_profession
         FROM users u
+        LEFT JOIN students s ON u.id = s.user_id
         LEFT JOIN associates a ON u.id = a.user_id
         WHERE u.id = ?
         LIMIT 1
@@ -87,17 +89,12 @@ if (!$u) {
     exit;
 }
 
-if ($viewerRole === 'admin' && ($u['role'] === 'admin' || $u['role'] === 'super_admin')) {
-    header('Location: view_members.php');
-    exit;
-}
-
 if ($u['category'] === 'partner' && $viewerRole !== 'super_admin' && $viewerId !== (int)$u['id']) {
     header('Location: view_members.php');
     exit;
 }
 
-if ($u['category'] === 'missionary' && $viewerRole !== 'super_admin' && $viewerId !== (int)$u['id']) {
+if ($u['category'] === 'missionary' && !$isAdmin && $viewerId !== (int)$u['id']) {
     header('Location: view_members.php');
     exit;
 }
@@ -286,6 +283,9 @@ ob_start();
                             case 'missionary':
                                 $catLabel = '<span class="badge text-white" style="background: linear-gradient(135deg, #6366f1, #a855f7) !important; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 2px 4px rgba(168,85,247,0.25);"><i class="bi bi-globe2"></i> Missionary</span>';
                                 break;
+                            case 'sports_ministry':
+                                $catLabel = '<span class="badge bg-primary"><i class="bi bi-trophy"></i> Sports Ministry</span>';
+                                break;
                             case 'other':
                                 $catLabel = '<span class="badge bg-secondary">Member</span>';
                                 break;
@@ -302,9 +302,12 @@ ob_start();
                     </div>
                     <div class="col-12 col-md-6"><strong>Joined:</strong> <?= date('M d, Y', strtotime($u['created_at'])) ?></div>
 
+                    <?php if ($u['category'] === 'student'): ?>
+                        <div class="col-12 col-md-6"><strong>Campus:</strong> <?= escape(!empty($u['student_campus']) ? $u['student_campus'] : '-') ?></div>
+                    <?php endif; ?>
                     <?php if ($u['category'] === 'associate'): ?>
-                        <div class="col-12 col-md-6"><strong>Graduation Year:</strong> <?= escape($u['assoc_grad_year'] ?? '-') ?></div>
-                        <div class="col-12 col-md-6"><strong>Current Profession:</strong> <?= escape($u['assoc_profession'] ?? '-') ?></div>
+                        <div class="col-12 col-md-6"><strong>Graduation Year:</strong> <?= escape($u['assoc_grad_year'] ?? $u['graduation_year'] ?? '-') ?></div>
+                        <div class="col-12 col-md-6"><strong>Current Profession:</strong> <?= escape($u['assoc_profession'] ?? $u['industry_profession'] ?? '-') ?></div>
                     <?php endif; ?>
                     <?php if ($u['category'] === 'missionary'): ?>
                         <div class="col-12 col-md-6"><strong>Missionary Type:</strong> <?= escape(str_replace('_', ' ', ucfirst($u['missionary_type'] ?? '-'))) ?></div>

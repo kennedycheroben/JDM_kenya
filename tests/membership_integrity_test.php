@@ -381,6 +381,120 @@ it('preserves database primary keys, AUTO_INCREMENT sequence, and foreign keys',
     assert_true($fkCount >= 20, "Must have all existing foreign keys referencing users(id) intact (found {$fkCount})");
 });
 
+// 11. view_members.php Includes Promoted Admins & Super Admins in Listings and Category Stats
+it('includes members promoted to admin and super_admin in view_members listing and category statistics', function () use ($pdo) {
+    $t = time();
+    $p = $pdo->prepare('INSERT INTO users (name, email, whatsapp_phone, password, role, category, is_approved, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+
+    // Student promoted to admin (like ID 1 Kennedy Cheroben & ID 4 Eunas Njagi in production)
+    $p->execute(["Promoted Student Admin {$t}", "stud_admin_{$t}@test.local", '254700000061', 'p', 'admin', 'student', 1, 'active']);
+    $idStudentAdmin = (int)$pdo->lastInsertId();
+
+    // Associate promoted to admin (like ID 6 Gideon Sang in production)
+    $p->execute(["Promoted Assoc Admin {$t}", "assoc_admin_{$t}@test.local", '254700000062', 'p', 'admin', 'associate', 1, 'active']);
+    $idAssocAdmin = (int)$pdo->lastInsertId();
+
+    // Approved missionary (like ID 9 in production)
+    $p->execute(["Approved Missionary {$t}", "miss_app_{$t}@test.local", '254700000063', 'p', 'member', 'missionary', 1, 'active']);
+    $idMissionary = (int)$pdo->lastInsertId();
+
+    // Approved office bearer / partner (like ID 8 in production)
+    $p->execute(["Approved Partner {$t}", "part_app_{$t}@test.local", '254700000064', 'p', 'member', 'partner', 1, 'active']);
+    $idPartner = (int)$pdo->lastInsertId();
+
+    // Admin visibility query from view_members.php
+    $adminVisibilityWhere = "role IN ('member','admin','super_admin') AND category != 'partner' AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status != 'deleted')";
+    $adminVisibleIds = array_map('intval', $pdo->query("SELECT id FROM users WHERE {$adminVisibilityWhere}")->fetchAll(PDO::FETCH_COLUMN));
+
+    assert_true(in_array($idStudentAdmin, $adminVisibleIds, true), 'Student promoted to admin must appear in admin view_members listing');
+    assert_true(in_array($idAssocAdmin, $adminVisibleIds, true), 'Associate promoted to admin must appear in admin view_members listing');
+    assert_true(in_array($idMissionary, $adminVisibleIds, true), 'Approved missionary must appear in admin view_members listing');
+    assert_true(!in_array($idPartner, $adminVisibleIds, true), 'Confidential partner must remain hidden from regular admin view_members listing');
+
+    // Office Bearer visibility query from view_members.php (viewing as $idPartner)
+    $partnerVisibilityWhere = "role IN ('member','admin','super_admin') AND (category NOT IN ('partner', 'missionary') OR id = {$idPartner}) AND (is_approved = 1 OR is_approved IS NULL) AND (account_status IS NULL OR account_status = 'active')";
+    $partnerVisibleIds = array_map('intval', $pdo->query("SELECT id FROM users WHERE {$partnerVisibilityWhere}")->fetchAll(PDO::FETCH_COLUMN));
+
+    assert_true(in_array($idStudentAdmin, $partnerVisibleIds, true), 'Student promoted to admin must appear in office bearer view_members listing');
+    assert_true(in_array($idAssocAdmin, $partnerVisibleIds, true), 'Associate promoted to admin must appear in office bearer view_members listing');
+    assert_true(in_array($idPartner, $partnerVisibleIds, true), 'Approved office bearer must see their own record in view_members listing');
+    assert_true(!in_array($idMissionary, $partnerVisibleIds, true), 'Missionary must remain hidden from office bearer view_members listing');
+
+    // Cleanup
+    $pdo->prepare('DELETE FROM users WHERE id IN (?, ?, ?, ?)')->execute([$idStudentAdmin, $idAssocAdmin, $idMissionary, $idPartner]);
+});
+
+// 12. Missing Related Records Handled Safely by LEFT JOIN in Profile View
+it('retrieves member profile via LEFT JOIN even when optional students or associates rows are missing', function () use ($pdo) {
+    $t = time();
+    $p = $pdo->prepare('INSERT INTO users (name, email, whatsapp_phone, password, role, category, is_approved, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $p->execute(["Student Without Campus Row {$t}", "nocampus_{$t}@test.local", '254700000071', 'p', 'member', 'student', 1, 'active']);
+    $idNoCampus = (int)$pdo->lastInsertId();
+
+    $p->execute(["Associate Without Assoc Row {$t}", "noassoc_{$t}@test.local", '254700000072', 'p', 'member', 'associate', 1, 'active']);
+    $idNoAssoc = (int)$pdo->lastInsertId();
+
+    $stmt = $pdo->prepare('
+        SELECT u.id, u.name, u.category, s.campus_name AS student_campus, a.graduation_year AS assoc_grad_year
+        FROM users u
+        LEFT JOIN students s ON u.id = s.user_id
+        LEFT JOIN associates a ON u.id = a.user_id
+        WHERE u.id = ?
+        LIMIT 1
+    ');
+
+    $stmt->execute([$idNoCampus]);
+    $row1 = $stmt->fetch(PDO::FETCH_ASSOC);
+    assert_true($row1 !== false && (int)$row1['id'] === $idNoCampus, 'Student without students row must still be retrieved');
+    assert_equals(null, $row1['student_campus'], 'Missing student campus must be NULL via LEFT JOIN');
+
+    $stmt->execute([$idNoAssoc]);
+    $row2 = $stmt->fetch(PDO::FETCH_ASSOC);
+    assert_true($row2 !== false && (int)$row2['id'] === $idNoAssoc, 'Associate without associates row must still be retrieved');
+    assert_equals(null, $row2['assoc_grad_year'], 'Missing associate grad year must be NULL via LEFT JOIN');
+
+    // Cleanup
+    $pdo->prepare('DELETE FROM users WHERE id IN (?, ?)')->execute([$idNoCampus, $idNoAssoc]);
+});
+
+// 13. Authentication Eligibility Independent of Directory Visibility
+it('verifies authentication eligibility works independently of directory visibility for approved partners, missionaries, and admins', function () use ($pdo) {
+    $t = time();
+    $plainPass = 'CorrectHorseBatteryStaple!99';
+    $hash = password_hash($plainPass, PASSWORD_DEFAULT);
+
+    $p = $pdo->prepare('INSERT INTO users (name, email, whatsapp_phone, password, role, category, is_approved, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    // Approved partner (hidden from regular member directory, but must be able to log in)
+    $emailPartner = "auth_partner_{$t}@test.local";
+    $p->execute(["Auth Partner {$t}", $emailPartner, '254700000081', $hash, 'member', 'partner', 1, 'active']);
+    $idAuthPartner = (int)$pdo->lastInsertId();
+
+    // Pending partner (must be blocked from logging in until approved)
+    $emailPending = "auth_pending_{$t}@test.local";
+    $p->execute(["Auth Pending {$t}", $emailPending, '254700000082', $hash, 'member', 'partner', 0, 'active']);
+    $idAuthPending = (int)$pdo->lastInsertId();
+
+    $loginStmt = $pdo->prepare('SELECT id, name, email, password, role, category, is_approved, account_status FROM users WHERE TRIM(LOWER(email)) = TRIM(LOWER(?)) LIMIT 1');
+
+    // Check approved partner login
+    $loginStmt->execute(["  " . strtoupper($emailPartner) . "  "]);
+    $uPartner = $loginStmt->fetch(PDO::FETCH_ASSOC);
+    assert_true($uPartner !== false && password_verify($plainPass, $uPartner['password']), 'Approved partner password verification must succeed');
+    $partnerBlocked = in_array($uPartner['account_status'], ['disabled', 'suspended', 'deleted'], true)
+        || (in_array($uPartner['category'], ['partner', 'missionary'], true) && empty($uPartner['is_approved']));
+    assert_true(!$partnerBlocked, 'Approved partner must be eligible to authenticate despite directory privacy');
+
+    // Check pending partner login
+    $loginStmt->execute([$emailPending]);
+    $uPending = $loginStmt->fetch(PDO::FETCH_ASSOC);
+    $pendingBlocked = in_array($uPending['account_status'], ['disabled', 'suspended', 'deleted'], true)
+        || (in_array($uPending['category'], ['partner', 'missionary'], true) && empty($uPending['is_approved']));
+    assert_true($pendingBlocked, 'Pending unapproved partner must be blocked from login until approved');
+
+    // Cleanup
+    $pdo->prepare('DELETE FROM users WHERE id IN (?, ?)')->execute([$idAuthPartner, $idAuthPending]);
+});
+
 echo "------------------------------------------------------------\n";
 echo "SUMMARY: {$totalPassed} passed, {$totalFailed} failed.\n";
 echo "------------------------------------------------------------\n";
