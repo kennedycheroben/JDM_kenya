@@ -1,7 +1,8 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
-// Check if user is logged in and is GBS leader
+// Check if user is logged in
 if (empty($_SESSION['user_role'])) {
     header('Location: login.php');
     exit;
@@ -10,25 +11,9 @@ if (empty($_SESSION['user_role'])) {
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $userName = $_SESSION['user_name'] ?? '';
 $userRole = $_SESSION['user_role'] ?? '';
-$isGbsLeader = false;
 
-// Check if user is GBS leader
-$isGbsLeader = false;
-try {
-    $stmt = $pdo->prepare("SELECT is_gbs_leader FROM users WHERE id = ?");
-    $stmt->execute([$userId]);
-    $userData = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($userData) {
-        $isGbsLeader = (bool)$userData['is_gbs_leader'];
-    }
-} catch (PDOException $e) {
-    // Column may not exist yet; fall back to gbs_members check
-    try {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gbs_members WHERE user_id = ? AND role = 'leader'");
-        $stmt->execute([$userId]);
-        $isGbsLeader = (bool)$stmt->fetchColumn();
-    } catch (PDOException $ignored) {}
-}
+// Server-side check for GBS Leader or Super Admin access
+$isGbsLeader = canUserCreateGbsGroup($pdo, $userId, $userRole);
 
 if (!$isGbsLeader) {
     header('Location: gbs_dashboard.php');
@@ -40,76 +25,66 @@ $success = '';
 $isNewLeader = isset($_GET['new_leader']) && $_GET['new_leader'] === '1';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_csrf();
-    $groupName = trim($_POST['group_name'] ?? '');
-    $groupSlogan = trim($_POST['group_slogan'] ?? '');
-    $leaderName = trim($_POST['leader_name'] ?? $userName);
-    
-    if ($groupName === '') {
-        $error = 'Group name is required.';
-    } elseif ($groupSlogan === '') {
-        $error = 'Group slogan is required.';
-    } elseif ($leaderName === '') {
-        $error = 'Leader name is required.';
+    if (!require_csrf()) {
+        $error = $_SESSION['csrf_error'] ?? 'Session expired. Please reload the page and try again.';
+        unset($_SESSION['csrf_error']);
     } else {
-        try {
-            $pdo->beginTransaction();
-            
-            // Handle profile picture upload
-            $profilePicPath = 'default_gbs.png';
-            if (!empty($_FILES['profile_picture']['name'])) {
-                $file = $_FILES['profile_picture'];
-                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                $allowed = ['jpg', 'jpeg', 'png', 'webp'];
-                
-                if ($file['error'] !== UPLOAD_ERR_OK) {
-                    throw new Exception('Upload failed. Please try again.');
-                } elseif (!in_array($ext, $allowed, true)) {
-                    throw new Exception('Please upload a JPG, PNG, or WEBP image.');
-                } elseif (($file['size'] ?? 0) > 4 * 1024 * 1024) {
-                    throw new Exception('Image too large. Max 4MB.');
-                }
-                
-                $destinationDir = UPLOAD_DIR . 'gbs_pfps/';
-                if (!is_dir($destinationDir)) {
-                    mkdir($destinationDir, 0775, true);
-                }
-                
-                $targetName = 'gbs_' . $userId . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
-                $destination = $destinationDir . $targetName;
-                
-                if (move_uploaded_file($file['tmp_name'], $destination)) {
+        $groupName = trim($_POST['group_name'] ?? '');
+        $groupSlogan = trim($_POST['group_slogan'] ?? '');
+        $requestedLeaderId = isset($_POST['leader_id']) && $_POST['leader_id'] !== ''
+            ? (int)$_POST['leader_id']
+            : $userId;
+
+        if ($groupName === '') {
+            $error = 'Group name is required.';
+        } elseif ($userRole !== 'super_admin' && $requestedLeaderId !== $userId) {
+            $error = 'You can only create a GBS group with yourself as the leader.';
+        } else {
+            try {
+                $profilePicPath = null;
+                if (!empty($_FILES['profile_picture']['name']) && ($_FILES['profile_picture']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                    $file = $_FILES['profile_picture'];
+                    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                    $allowed = ['jpg', 'jpeg', 'png', 'webp'];
+
+                    if ($file['error'] !== UPLOAD_ERR_OK) {
+                        throw new RuntimeException('Upload failed. Please try again.');
+                    } elseif (!in_array($ext, $allowed, true)) {
+                        throw new RuntimeException('Please upload a JPG, PNG, or WEBP image.');
+                    } elseif (($file['size'] ?? 0) > 4 * 1024 * 1024) {
+                        throw new RuntimeException('Image too large. Max 4MB.');
+                    }
+
+                    $uploadRoot = defined('UPLOAD_DIR') ? UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads/');
+                    $destinationDir = rtrim($uploadRoot, '/') . '/gbs_pfps/';
+                    if (!is_dir($destinationDir)) {
+                        mkdir($destinationDir, 0775, true);
+                    }
+
+                    $targetName = 'gbs_' . $userId . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+                    $destination = $destinationDir . $targetName;
+
+                    if (!move_uploaded_file($file['tmp_name'], $destination)) {
+                        throw new RuntimeException('Failed to save uploaded group image.');
+                    }
                     $profilePicPath = 'uploads/gbs_pfps/' . $targetName;
                 }
+
+                $gbsId = createGbsGroup(
+                    $pdo,
+                    $userId,
+                    $userRole,
+                    $groupName,
+                    $groupSlogan !== '' ? $groupSlogan : null,
+                    $userRole === 'super_admin' ? $requestedLeaderId : $userId,
+                    $profilePicPath
+                );
+
+                header('Location: gbs_group.php?id=' . $gbsId . '&message=' . urlencode('GBS group created successfully!'));
+                exit;
+            } catch (Throwable $e) {
+                $error = $e->getMessage();
             }
-            
-            // Create GBS group
-            $stmt = $pdo->prepare("
-                INSERT INTO gbs_groups (name, slogan, leader_id, pfp_path, created_at) 
-                VALUES (?, ?, ?, ?, NOW())
-            ");
-            $stmt->execute([$groupName, $groupSlogan, $userId, $profilePicPath]);
-            $gbsId = $pdo->lastInsertId();
-            
-            // Add creator as leader member
-            $stmt = $pdo->prepare("
-                INSERT INTO gbs_members (gbs_id, user_id, role, joined_at) 
-                VALUES (?, ?, 'leader', NOW())
-            ");
-            $stmt->execute([$gbsId, $userId]);
-            
-            $pdo->commit();
-            
-            $success = 'GBS group created successfully! Redirecting to your group...';
-            
-            // Redirect to the new group after 2 seconds
-            header("refresh:2;url=gbs_group.php?id=$gbsId");
-            
-        } catch (Exception $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            $error = $e->getMessage();
         }
     }
 }
@@ -130,7 +105,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             padding: 2rem;
         }
         .welcome-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #2C5EAD 0%, #1591DC 100%);
             color: white;
             border-radius: 16px;
             padding: 2rem;
@@ -215,7 +190,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     <div class="col-md-8">
                         <div class="mb-4">
                             <label class="form-label fw-bold">
-                                <i class="bi bi-people"></i> GBS Group Name *
+                                <i class="bi bi-people"></i> GBS Group Name <span class="text-danger">*</span>
                             </label>
                             <input type="text" name="group_name" class="form-control form-control-lg" 
                                    placeholder="Enter your GBS group name" required
@@ -225,32 +200,31 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         
                         <div class="mb-4">
                             <label class="form-label fw-bold">
-                                <i class="bi bi-quote"></i> Group Slogan *
+                                <i class="bi bi-quote"></i> Group Slogan <span class="text-muted fw-normal">(Optional)</span>
                             </label>
                             <textarea name="group_slogan" class="form-control form-control-lg" rows="3" 
-                                      placeholder="Enter your group's slogan or mission statement" required><?= htmlspecialchars($_POST['group_slogan'] ?? '') ?></textarea>
+                                      placeholder="Enter your group's slogan or mission statement (optional)"><?= htmlspecialchars($_POST['group_slogan'] ?? '') ?></textarea>
                             <div class="form-text">A short, inspiring statement about your group's purpose.</div>
                         </div>
                         
                         <div class="mb-4">
                             <label class="form-label fw-bold">
-                                <i class="bi bi-person"></i> GBS Leader Name *
+                                <i class="bi bi-person"></i> GBS Leader
                             </label>
-                            <input type="text" name="leader_name" class="form-control form-control-lg" 
-                                   placeholder="Your name as GBS leader" required
-                                   value="<?= htmlspecialchars($_POST['leader_name'] ?? $userName) ?>">
-                            <div class="form-text">This will be displayed as the group leader's name.</div>
+                            <input type="text" class="form-control form-control-lg bg-light" 
+                                   value="<?= htmlspecialchars($userName) ?> (You)" readonly>
+                            <div class="form-text">You will automatically be assigned as the leader of this group.</div>
                         </div>
                     </div>
                     
                     <div class="col-md-4">
                         <div class="text-center">
                             <label class="form-label fw-bold">
-                                <i class="bi bi-image"></i> Group Profile Picture
+                                <i class="bi bi-image"></i> Group Profile Picture <span class="text-muted fw-normal">(Optional)</span>
                             </label>
                             <div class="mb-3">
                                 <img id="profilePreview" class="profile-preview" 
-                                     src="<?= BASE_PATH ?>/uploads/gbs_pfps/default_gbs.png" 
+                                     src="<?= BASE_PATH ?>/images/jdm_logo.png" 
                                      alt="Group profile picture">
                             </div>
                             <div class="file-upload-wrapper">
@@ -258,11 +232,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                     <i class="bi bi-camera"></i> Choose Photo
                                 </label>
                                 <input type="file" name="profile_picture" id="profile_picture" 
-                                       accept="image/*" onchange="previewImage(event)">
+                                       accept="image/png,image/jpeg,image/webp" onchange="previewImage(event)">
                             </div>
                             <div class="form-text small">
-                                JPG, PNG, or WEBP. Max 4MB.<br>
-                                Default image will be used if none uploaded.
+                                JPG, PNG, or WEBP. Max 4MB.
                             </div>
                         </div>
                     </div>
@@ -297,15 +270,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
         }
         
-        // Add form validation feedback
         document.getElementById('gbsSetupForm').addEventListener('submit', function(e) {
             const groupName = document.querySelector('input[name="group_name"]').value.trim();
-            const groupSlogan = document.querySelector('textarea[name="group_slogan"]').value.trim();
-            const leaderName = document.querySelector('input[name="leader_name"]').value.trim();
-            
-            if (!groupName || !groupSlogan || !leaderName) {
+            if (!groupName) {
                 e.preventDefault();
-                alert('Please fill in all required fields.');
+                alert('Please enter a group name.');
             }
         });
     </script>

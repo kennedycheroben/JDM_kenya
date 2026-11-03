@@ -1,6 +1,7 @@
 <?php
 ob_start();
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 header('Content-Type: application/json');
 
@@ -22,16 +23,7 @@ if ($gbs_id <= 0) {
     exit;
 }
 
-// Check if user is a member, unless they are the JDM Leader.
-if ($is_super_admin) {
-    $stmt = $pdo->prepare("SELECT id FROM gbs_groups WHERE id = ? LIMIT 1");
-    $stmt->execute([$gbs_id]);
-    $membership = $stmt->fetch() ? ['role' => 'leader'] : false;
-} else {
-    $stmt = $pdo->prepare("SELECT role FROM gbs_members WHERE gbs_id = ? AND user_id = ?");
-    $stmt->execute([$gbs_id, $user_id]);
-    $membership = $stmt->fetch();
-}
+$membership = getGbsGroupMembership($pdo, $gbs_id, $user_id, $user_role);
 
 if (!$membership) {
     ob_clean();
@@ -39,7 +31,7 @@ if (!$membership) {
     exit;
 }
 
-$is_leader = ($membership['role'] === 'leader') || $is_super_admin;
+$is_leader = !empty($membership['can_manage']);
 
 if ($action === 'fetch') {
     $last_id = (int)($_GET['last_id'] ?? 0);

@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 if (empty($_SESSION['user_role']) || $_SESSION['user_role'] !== 'super_admin') {
     header('Location: ' . BASE_PATH . '/login.php');
@@ -122,25 +123,53 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     } elseif ($leaderType === 'campus_leader' && $campusName === '') {
                         $err = 'Please select a campus for the campus leader.';
                     } else {
-                        $pdo->prepare("INSERT INTO leaders (user_id, leader_type, campus_name, created_by) VALUES (?, ?, ?, ?)")
-                            ->execute([$targetId, $leaderType, $campusName ?: null, $selfId]);
-                        $typeLabel = str_replace('_', ' ', $leaderType);
-                        $msg = "User appointed as {$typeLabel}.";
-                        try {
-                            $campusInfo = $campusName ? " for {$campusName}" : '';
-                            $notifText = "🎉 Congratulations! You have been appointed as a " . ucfirst($typeLabel) . "{$campusInfo}.\n\nReason from JDM leadership:\n{$reason}\n\nGod bless you in this new leadership role!";
-                            $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
-                            $stmtNotif->execute([$selfId, $targetId, $notifText]);
-                        } catch (PDOException $e) {
-                            error_log("Failed to send leadership notification: " . $e->getMessage());
+                        if ($leaderType === 'gbs_leader') {
+                            appointGbsLeader($pdo, $targetId, $selfId, $campusName ?: null);
+                            $msg = 'User appointed as GBS Leader.';
+                            try {
+                                $expiry = time() + (7 * 24 * 60 * 60);
+                                $campusInfo = $campusName ? " for {$campusName}" : '';
+                                $reasonBlock = $reason !== '' ? "\n\nReason from JDM leadership:\n{$reason}" : '';
+                                $notifText = "🎉 Congratulations! You have been appointed as a GBS Leader{$campusInfo}.{$reasonBlock}\n\nYou can now access your GBS Dashboard to start creating and managing your GBS group(s):\ngbs_dashboard.php?new_leader=1&exp=" . $expiry . "\n\nGod bless you in this new leadership role!";
+                                $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                                $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                            } catch (PDOException $e) {
+                                error_log("Failed to send GBS Leader appointment notification: " . $e->getMessage());
+                            }
+                        } else {
+                            $stmtExist = $pdo->prepare('SELECT id FROM leaders WHERE user_id = ? AND leader_type = ? LIMIT 1');
+                            $stmtExist->execute([$targetId, $leaderType]);
+                            $existId = (int)($stmtExist->fetchColumn() ?: 0);
+                            if ($existId > 0) {
+                                $pdo->prepare('UPDATE leaders SET campus_name = ? WHERE id = ?')->execute([$campusName ?: null, $existId]);
+                            } else {
+                                $pdo->prepare("INSERT INTO leaders (user_id, leader_type, campus_name, created_by) VALUES (?, ?, ?, ?)")
+                                    ->execute([$targetId, $leaderType, $campusName ?: null, $selfId]);
+                            }
+                            $typeLabel = str_replace('_', ' ', $leaderType);
+                            $msg = "User appointed as {$typeLabel}.";
+                            try {
+                                $campusInfo = $campusName ? " for {$campusName}" : '';
+                                $notifText = "🎉 Congratulations! You have been appointed as a " . ucfirst($typeLabel) . "{$campusInfo}.\n\nReason from JDM leadership:\n{$reason}\n\nGod bless you in this new leadership role!";
+                                $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                                $stmtNotif->execute([$selfId, $targetId, $notifText]);
+                            } catch (PDOException $e) {
+                                error_log("Failed to send leadership notification: " . $e->getMessage());
+                            }
                         }
                     }
                 } elseif ($action === 'remove_leader') {
                     $leaderType = trim($_POST['leader_type'] ?? '');
-                    $pdo->prepare("DELETE FROM leaders WHERE user_id = ? AND leader_type = ?")
-                        ->execute([$targetId, $leaderType]);
+                    if ($leaderType === 'gbs_leader') {
+                        revokeGbsLeader($pdo, $targetId);
+                        $msg = 'GBS Leader role removed from user.';
+                    } else {
+                        $pdo->prepare("DELETE FROM leaders WHERE user_id = ? AND leader_type = ?")
+                            ->execute([$targetId, $leaderType]);
+                        $typeLabel = str_replace('_', ' ', $leaderType);
+                        $msg = "{$typeLabel} role removed from user.";
+                    }
                     $typeLabel = str_replace('_', ' ', $leaderType);
-                    $msg = "{$typeLabel} role removed from user.";
                     try {
                         $notifText = "ℹ️ Your appointment as a " . ucfirst($typeLabel) . " has been removed by JDM leadership.\n\nReason from JDM leadership:\n{$reason}";
                         $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
@@ -190,7 +219,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         error_log("Failed to send Admin promotion notification: " . $e->getMessage());
                     }
                 } elseif ($action === 'promote_gbs_leader') {
-                    $pdo->prepare("UPDATE users SET is_gbs_leader = 1 WHERE id = ?")->execute([$targetId]);
+                    appointGbsLeader($pdo, $targetId, $selfId);
                     $msg = 'User appointed as GBS Leader.';
                     
                     // Notify the user via chat
@@ -209,7 +238,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         exit;
                     }
                 } elseif ($action === 'demote_member') {
-                    $pdo->prepare("UPDATE users SET role = 'member', is_gbs_leader = 0 WHERE id = ?")->execute([$targetId]);
+                    $pdo->prepare("UPDATE users SET role = 'member' WHERE id = ?")->execute([$targetId]);
+                    revokeGbsLeader($pdo, $targetId);
+                    $pdo->prepare("DELETE FROM leaders WHERE user_id = ?")->execute([$targetId]);
                     $msg = 'User demoted to member.';
                     try {
                         $notifText = "ℹ️ Your account role has been updated to Member by JDM leadership.\n\nReason from JDM leadership:\n{$reason}\n\nIf you have questions, please contact JDM leadership.";
@@ -219,7 +250,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         error_log("Failed to send demotion notification: " . $e->getMessage());
                     }
                 } elseif ($action === 'remove_gbs_leader') {
-                    $pdo->prepare("UPDATE users SET is_gbs_leader = 0 WHERE id = ?")->execute([$targetId]);
+                    revokeGbsLeader($pdo, $targetId);
                     $msg = 'GBS Leader role removed from user.';
                     try {
                         $notifText = "ℹ️ Your GBS Leader appointment has been removed by JDM leadership.\n\nReason from JDM leadership:\n{$reason}\n\nYou can continue using the portal as a member.";
@@ -360,6 +391,8 @@ try {
 } catch (Throwable $e) {
     $leaders = [];
 }
+
+$gbsLeadersWithGroups = getAppointedGbsLeadersWithGroups($pdo);
 
 $allowedCampuses = ['Main Campus', 'Upper Kabete', 'Lower Kabete', 'Chiromo', 'Kikuyu', 'Parklands'];
 
@@ -542,6 +575,91 @@ ob_start();
         padding: 8px 12px;
     }
 </style>
+
+<!-- ===================================================================== -->
+<!-- APPOINTED GBS LEADERS & GROUP OVERSIGHT SECTION -->
+<!-- ===================================================================== -->
+<div class="card mb-4 border-primary">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0">
+            <i class="bi bi-people-fill"></i>
+            Appointed GBS Leaders (<?= count($gbsLeadersWithGroups) ?>)
+        </h5>
+        <a href="<?= BASE_PATH ?>/gbs_dashboard.php" class="btn btn-sm btn-light text-primary fw-semibold">
+            <i class="bi bi-grid-1x2-fill"></i> All GBS Groups Oversight
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <?php if (empty($gbsLeadersWithGroups)): ?>
+            <div class="p-3 text-muted">No GBS Leaders are currently appointed. Use the Actions menu in the table below to appoint an existing registered member as a GBS Leader.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped table-hover align-middle w-100 mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 60px;">No.</th>
+                            <th style="width: 105px;">Member ID</th>
+                            <th>GBS Leader</th>
+                            <th>Email</th>
+                            <th>Managed GBS Groups &amp; Members</th>
+                            <th style="min-width: 190px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($gbsLeadersWithGroups as $gIdx => $gl): ?>
+                            <?php $glId = (int)$gl['id']; ?>
+                            <tr>
+                                <td><strong><?= (int)($gIdx + 1) ?></strong></td>
+                                <td><span class="badge bg-light text-dark border">#<?= $glId ?></span></td>
+                                <td>
+                                    <strong><?= escape($gl['name']) ?></strong>
+                                    <span class="badge bg-warning text-dark ms-1">GBS Leader</span>
+                                    <?php if (!empty($gl['campus_name'])): ?>
+                                        <div class="small text-muted"><i class="bi bi-geo-alt"></i> <?= escape($gl['campus_name']) ?></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?= escape($gl['email']) ?></td>
+                                <td>
+                                    <?php if (empty($gl['groups'])): ?>
+                                        <span class="text-muted small">No GBS group created yet</span>
+                                    <?php else: ?>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <?php foreach ($gl['groups'] as $grp): ?>
+                                                <a href="<?= BASE_PATH ?>/gbs_group.php?id=<?= (int)$grp['id'] ?>" class="badge bg-info text-dark text-decoration-none p-2 border">
+                                                    <i class="bi bi-people-fill"></i> <?= escape($grp['name']) ?>
+                                                    <span class="badge bg-dark text-white ms-1"><?= (int)$grp['member_count'] ?> members</span>
+                                                </a>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <a href="<?= BASE_PATH ?>/view_member.php?id=<?= $glId ?>" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i> Profile
+                                        </a>
+                                        <?php if ($glId !== (int)($_SESSION['user_id'] ?? 0) && ($gl['role'] ?? '') !== 'super_admin'): ?>
+                                            <form method="post" class="d-inline" onsubmit="return attachActionReason(this, 'removing this GBS Leader');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="user_id" value="<?= $glId ?>">
+                                                <input type="hidden" name="action" value="remove_leader">
+                                                <input type="hidden" name="leader_type" value="gbs_leader">
+                                                <input type="hidden" name="reason" value="">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="bi bi-people-slash"></i> Remove Appointment
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
 
 <div class="card">
     <div class="card-header bg-dark text-white">

@@ -1,6 +1,7 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
 require_once dirname(__FILE__) . '/../../core/downloads.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 // Check member access
 if (empty($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['member', 'admin', 'super_admin'], true)) {
@@ -8,9 +9,10 @@ if (empty($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['member'
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
+$user_id = (int)$_SESSION['user_id'];
 $user_name = $_SESSION['user_name'];
 $user_role = $_SESSION['user_role'];
+$is_member_gbs_leader = isUserGbsLeader($pdo, $user_id);
 
 // Get member details
 $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
@@ -279,8 +281,23 @@ ob_start();
             </div>
             <div class="card-body">
                 <p><strong>Account Status:</strong> <span class="badge bg-success">Active</span></p>
-                <p><strong>Role:</strong> <span class="badge bg-primary">Member</span></p>
-                <p><strong>Access Level:</strong> Full Member dashboard Access</p>
+                <p>
+                    <strong>Role:</strong> <span class="badge bg-primary"><?= escape(ucfirst($user_role)) ?></span>
+                    <?php if ($is_member_gbs_leader): ?>
+                        <span class="badge bg-warning text-dark ms-1"><i class="bi bi-people-fill"></i> GBS Leader</span>
+                    <?php endif; ?>
+                </p>
+                <p><strong>Access Level:</strong> <?= $is_member_gbs_leader ? 'Member &amp; GBS Leader Dashboard Access' : 'Full Member dashboard Access' ?></p>
+                <?php if ($is_member_gbs_leader): ?>
+                    <div class="d-flex flex-wrap gap-2 mt-2 mb-2">
+                        <a href="gbs_dashboard.php?set_dashboard=gbs" class="btn btn-sm btn-warning text-dark fw-semibold">
+                            <i class="bi bi-people-fill"></i> GBS Leader Dashboard
+                        </a>
+                        <a href="create_gbs.php" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-plus-circle"></i> Create GBS Group
+                        </a>
+                    </div>
+                <?php endif; ?>
                 <hr>
                 <p class="text-muted small mb-0">You have access to all member resources, activities, and community features. Stay connected with us!</p>
             </div>

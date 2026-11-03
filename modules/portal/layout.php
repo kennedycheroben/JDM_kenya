@@ -3,6 +3,7 @@
 // This layout provides consistent sidebar + navbar structure
 
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 // Get logged in user info
 $user_name = isset($_SESSION['user_name']) ? $_SESSION['user_name'] : "Member";
@@ -25,15 +26,16 @@ if ($user_id > 0) {
             $user_category = $user_data['category'];
         }
         
-        // Check if user is GBS leader
+        // Check if user is an appointed GBS Leader (reconciles leaders table & users.is_gbs_leader)
+        $is_gbs_leader = isUserGbsLeader($pdo, $user_id);
+
         $stmt = $pdo->prepare("
             SELECT COUNT(*) as count FROM gbs_members 
             WHERE user_id = ? AND role = 'leader'
         ");
         $stmt->execute([$user_id]);
         $gbs_data = $stmt->fetch(PDO::FETCH_ASSOC);
-        $is_gbs_leader = $gbs_data['count'] > 0;
-        $gbs_groups_count = $gbs_data['count'];
+        $gbs_groups_count = (int)($gbs_data['count'] ?? 0);
     } catch (PDOException $e) {
         error_log("Error getting user details: " . $e->getMessage());
     }
@@ -643,6 +645,18 @@ if (!isset($page_title)) {
                     </a>
                 </li>
                 <?php endif; ?>
+                <?php if ($is_gbs_leader || $is_super_admin): ?>
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white" href="gbs_dashboard.php?set_dashboard=gbs">
+                        <i class="bi bi-people-fill"></i> GBS Dashboard
+                    </a>
+                </li>
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white" href="create_gbs.php">
+                        <i class="bi bi-plus-circle"></i> Create GBS Group
+                    </a>
+                </li>
+                <?php endif; ?>
 
                 <?php if($is_admin): ?>
                     <li class="nav-item mb-2">
@@ -903,6 +917,16 @@ if (!isset($page_title)) {
                                         <?php endif; ?>
                                     </ul>
                                 </div>
+                            <?php elseif ($is_gbs_leader): ?>
+                                <?php if ($is_gbs_page || $active_dashboard === 'gbs'): ?>
+                                    <a href="?set_dashboard=member" class="btn btn-sm btn-outline-light py-0 py-sm-1">
+                                        <i class="bi bi-person"></i> Member View
+                                    </a>
+                                <?php else: ?>
+                                    <a href="<?= $gbs_leader_switch_url ?>" class="btn btn-sm btn-warning text-dark fw-semibold py-0 py-sm-1">
+                                        <i class="bi bi-people-fill"></i> GBS Leader View
+                                    </a>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -926,12 +950,17 @@ if (!isset($page_title)) {
                                 <i class="bi bi-star-fill"></i> You have been appointed as a GBS Leader.
                             </div>
                             <div class="small mb-0">
-                                Use the button below or the sidebar shortcut to enter your GBS Leader dashboard and manage your group, members, resources and announcements.
+                                Use the buttons below or the sidebar switcher to enter your GBS Leader dashboard, create a GBS group, and manage your members, resources, and announcements.
                             </div>
                         </div>
-                        <a href="<?= $gbs_leader_switch_url ?>" class="btn btn-warning btn-lg text-dark fw-bold flex-shrink-0">
-                            <i class="bi bi-people-fill"></i> Go to GBS Leader Dashboard
-                        </a>
+                        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+                            <a href="<?= $gbs_leader_switch_url ?>" class="btn btn-warning text-dark fw-bold">
+                                <i class="bi bi-people-fill"></i> GBS Leader Dashboard
+                            </a>
+                            <a href="create_gbs.php" class="btn btn-outline-dark fw-semibold">
+                                <i class="bi bi-plus-circle"></i> Create GBS Group
+                            </a>
+                        </div>
                     </div>
                 <?php endif; ?>
                 <?php

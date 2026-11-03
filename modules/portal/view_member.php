@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 $viewerRole = $_SESSION['user_role'] ?? '';
 $viewerId = (int)($_SESSION['user_id'] ?? 0);
@@ -7,13 +8,7 @@ $viewerId = (int)($_SESSION['user_id'] ?? 0);
 $isAdmin = ($viewerRole === 'admin' || $viewerRole === 'super_admin');
 $sessionAdmin = $isAdmin;
 
-$sessionGbsLeader = false;
-if ($viewerId > 0) {
-    $stmtGbs = $pdo->prepare("SELECT COUNT(*) as c FROM gbs_members WHERE user_id = ? AND role = 'leader'");
-    $stmtGbs->execute([$viewerId]);
-    $gbsCheck = $stmtGbs->fetch(PDO::FETCH_ASSOC);
-    $sessionGbsLeader = ($gbsCheck && $gbsCheck['c'] > 0);
-}
+$sessionGbsLeader = $viewerId > 0 ? isUserGbsLeader($pdo, $viewerId) : false;
 
 $isOfficeBearer = false;
 if (!$isAdmin && $viewerId > 0) {
@@ -112,7 +107,7 @@ try {
 }
 $leaderTypes = array_column($uLeaders, 'leader_type');
 $isCampusLeader   = in_array('campus_leader',   $leaderTypes);
-$isGbsLeader      = in_array('gbs_leader',      $leaderTypes);
+$isGbsLeader      = isUserGbsLeader($pdo, $id);
 $isWorshipLeader  = in_array('worship_leader',  $leaderTypes);
 $isStaff          = $u['is_staff'] ?? 0;
 
@@ -122,7 +117,10 @@ $isOwnProfile = ($viewerId === $id);
 $msg = '';
 $err = '';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $viewerRole === 'super_admin') {
-    require_csrf();
+    if (!require_csrf()) {
+        $err = $_SESSION['csrf_error'] ?? 'Session expired. Please reload the page and try again.';
+        unset($_SESSION['csrf_error']);
+    } else {
     $action = $_POST['action'] ?? '';
     $reason = trim($_POST['reason'] ?? '');
     $selfId = (int)($_SESSION['user_id'] ?? 0);
@@ -141,17 +139,43 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $viewerRole === 'super_a
                 } elseif ($leaderType === 'campus_leader' && $campusName === '') {
                     $err = 'Please select a campus.';
                 } else {
-                    $pdo->prepare("INSERT INTO leaders (user_id, leader_type, campus_name, created_by) VALUES (?, ?, ?, ?)")
-                        ->execute([$targetId, $leaderType, $campusName ?: null, $selfId]);
-                    $typeLabel = str_replace('_', ' ', $leaderType);
-                    $msg = "User appointed as {$typeLabel}.";
-                    $campusInfo = $campusName ? " for {$campusName}" : '';
-                    $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
-                    $stmtNotif->execute([$selfId, $targetId, "🎉 Congratulations! You have been appointed as a " . ucfirst($typeLabel) . "{$campusInfo}.\n\nReason: {$reason}"]);
+                    if ($leaderType === 'gbs_leader') {
+                        appointGbsLeader($pdo, $targetId, $selfId, $campusName ?: null);
+                        $msg = 'User appointed as GBS Leader.';
+                        $isGbsLeader = true;
+                        $expiry = time() + (7 * 24 * 60 * 60);
+                        $campusInfo = $campusName ? " for {$campusName}" : '';
+                        $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                        $stmtNotif->execute([$selfId, $targetId, "🎉 Congratulations! You have been appointed as a GBS Leader{$campusInfo}.\n\nReason: {$reason}\n\nAccess your GBS Dashboard: gbs_dashboard.php?new_leader=1&exp={$expiry}"]);
+                    } else {
+                        $stmtExist = $pdo->prepare('SELECT id FROM leaders WHERE user_id = ? AND leader_type = ? LIMIT 1');
+                        $stmtExist->execute([$targetId, $leaderType]);
+                        $existId = (int)($stmtExist->fetchColumn() ?: 0);
+                        if ($existId > 0) {
+                            $pdo->prepare('UPDATE leaders SET campus_name = ? WHERE id = ?')->execute([$campusName ?: null, $existId]);
+                        } else {
+                            $pdo->prepare("INSERT INTO leaders (user_id, leader_type, campus_name, created_by) VALUES (?, ?, ?, ?)")
+                                ->execute([$targetId, $leaderType, $campusName ?: null, $selfId]);
+                        }
+                        if ($leaderType === 'campus_leader') $isCampusLeader = true;
+                        if ($leaderType === 'worship_leader') $isWorshipLeader = true;
+                        $typeLabel = str_replace('_', ' ', $leaderType);
+                        $msg = "User appointed as {$typeLabel}.";
+                        $campusInfo = $campusName ? " for {$campusName}" : '';
+                        $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
+                        $stmtNotif->execute([$selfId, $targetId, "🎉 Congratulations! You have been appointed as a " . ucfirst($typeLabel) . "{$campusInfo}.\n\nReason: {$reason}"]);
+                    }
                 }
             } elseif ($action === 'remove_leader') {
                 $leaderType = trim($_POST['leader_type'] ?? '');
-                $pdo->prepare("DELETE FROM leaders WHERE user_id = ? AND leader_type = ?")->execute([$targetId, $leaderType]);
+                if ($leaderType === 'gbs_leader') {
+                    revokeGbsLeader($pdo, $targetId);
+                    $isGbsLeader = false;
+                } else {
+                    $pdo->prepare("DELETE FROM leaders WHERE user_id = ? AND leader_type = ?")->execute([$targetId, $leaderType]);
+                    if ($leaderType === 'campus_leader') $isCampusLeader = false;
+                    if ($leaderType === 'worship_leader') $isWorshipLeader = false;
+                }
                 $typeLabel = str_replace('_', ' ', $leaderType);
                 $msg = "{$typeLabel} role removed.";
                 $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
@@ -162,6 +186,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $viewerRole === 'super_a
                     $err = 'Invalid staff type.';
                 } else {
                     $pdo->prepare("UPDATE users SET is_staff = 1, staff_type = ? WHERE id = ?")->execute([$staffType, $targetId]);
+                    $isStaff = 1;
+                    $u['staff_type'] = $staffType;
                     $label = $staffType === 'part_time' ? 'Part-Time Staff' : 'Full-Time Staff';
                     $msg = "User appointed as {$label}.";
                     $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
@@ -169,21 +195,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $viewerRole === 'super_a
                 }
             } elseif ($action === 'remove_staff') {
                 $pdo->prepare("UPDATE users SET is_staff = 0, staff_type = NULL WHERE id = ?")->execute([$targetId]);
+                $isStaff = 0;
+                $u['staff_type'] = null;
                 $msg = 'Staff role removed.';
                 $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
                 $stmtNotif->execute([$selfId, $targetId, "ℹ️ Your staff appointment has been removed.\n\nReason: {$reason}"]);
             } elseif ($action === 'promote_admin') {
                 $pdo->prepare("UPDATE users SET role = 'admin' WHERE id = ?")->execute([$targetId]);
+                $u['role'] = 'admin';
                 $msg = 'User promoted to admin.';
                 $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
                 $stmtNotif->execute([$selfId, $targetId, "🛡️ Congratulations! You have been promoted to Admin.\n\nReason: {$reason}"]);
             } elseif ($action === 'demote_member') {
                 $pdo->prepare("UPDATE users SET role = 'member' WHERE id = ?")->execute([$targetId]);
-                // Also clear is_gbs_leader if the column exists (graceful fallback)
-                try {
-                    $pdo->prepare("UPDATE users SET is_gbs_leader = 0 WHERE id = ?")->execute([$targetId]);
-                } catch (Throwable $ignored) {}
+                revokeGbsLeader($pdo, $targetId);
                 $pdo->prepare("DELETE FROM leaders WHERE user_id = ?")->execute([$targetId]);
+                $u['role'] = 'member';
+                $isGbsLeader = false;
+                $isCampusLeader = false;
+                $isWorshipLeader = false;
                 $msg = 'User demoted to member.';
                 $stmtNotif = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, message_text, status) VALUES (?, ?, ?, 'sent')");
                 $stmtNotif->execute([$selfId, $targetId, "ℹ️ Your account role has been updated to Member.\n\nReason: {$reason}"]);
@@ -211,6 +241,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $viewerRole === 'super_a
                 @file_put_contents($logFile, date('c') . ' TRACE ' . $e->getTraceAsString() . PHP_EOL, FILE_APPEND);
                 $err = 'Operation failed: ' . $e->getMessage();
         }
+    }
     }
 }
 

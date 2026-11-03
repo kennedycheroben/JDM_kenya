@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 
 // Check if user is logged in
 if (empty($_SESSION['user_role'])) {
@@ -17,33 +18,17 @@ if ($gbs_id <= 0) {
     exit;
 }
 
-// Check if user is a member of this GBS group, unless they are the JDM Leader.
-if ($is_super_admin) {
-    $stmt = $pdo->prepare("
-        SELECT 'leader' AS role, g.name, g.slogan, g.pfp_path, g.leader_id, g.chat_restricted
-        FROM gbs_groups g
-        WHERE g.id = ?
-    ");
-    $stmt->execute([$gbs_id]);
-} else {
-    $stmt = $pdo->prepare("
-        SELECT gm.role, g.name, g.slogan, g.pfp_path, g.leader_id, g.chat_restricted
-        FROM gbs_members gm
-        JOIN gbs_groups g ON gm.gbs_id = g.id
-        WHERE gm.gbs_id = ? AND gm.user_id = ?
-    ");
-    $stmt->execute([$gbs_id, $user_id]);
-}
-$membership = $stmt->fetch(PDO::FETCH_ASSOC);
+// Check if user is an authorized member/leader of this GBS group, or Super Admin
+$membership = getGbsGroupMembership($pdo, $gbs_id, $user_id, $user_role);
 
 if (!$membership) {
-    header('Location: gbs_dashboard.php');
+    header('Location: gbs_dashboard.php?error=' . urlencode('You do not have access to that GBS group.'));
     exit;
 }
 
 $is_leader = ($membership['role'] === 'leader');
-$can_manage_group = $is_leader || $is_super_admin;
-$can_delete_group = $is_super_admin || (int)$membership['leader_id'] === $user_id;
+$can_manage_group = !empty($membership['can_manage']);
+$can_delete_group = !empty($membership['can_delete']);
 
 // Get group members
 $stmt = $pdo->prepare("
@@ -80,43 +65,46 @@ $stmt = $pdo->prepare("
 $stmt->execute([$gbs_id]);
 $resources = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Handle announcements
-$message = '';
-$error = '';
+// Handle announcements and redirect feedback
+$message = trim((string)($_GET['message'] ?? ''));
+$error = trim((string)($_GET['error'] ?? ''));
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $can_manage_group) {
-    require_csrf();
-    $action = $_POST['action'] ?? '';
-    
-    if ($action === 'add_announcement') {
-        $title = trim($_POST['title'] ?? '');
-        $content = trim($_POST['content'] ?? '');
+    if (!require_csrf()) {
+        $error = 'Security validation failed. Please refresh the page and try again.';
+    } else {
+        $action = $_POST['action'] ?? '';
         
-        if (empty($title) || empty($content)) {
-            $error = 'Title and content are required';
-        } else {
-            try {
-                $stmt = $pdo->prepare("
-                    INSERT INTO gbs_announcements (gbs_id, author_id, title, content, created_at)
-                    VALUES (?, ?, ?, ?, NOW())
-                ");
-                $stmt->execute([$gbs_id, $user_id, $title, $content]);
-                $message = 'Announcement added successfully!';
-                
-                // Refresh announcements
-                $stmt = $pdo->prepare("
-                    SELECT a.*, u.name as author_name
-                    FROM gbs_announcements a
-                    JOIN users u ON a.author_id = u.id
-                    WHERE a.gbs_id = ?
-                    ORDER BY a.created_at DESC
-                    LIMIT 5
-                ");
-                $stmt->execute([$gbs_id]);
-                $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                
-            } catch (PDOException $e) {
-                $error = 'Failed to add announcement: ' . $e->getMessage();
+        if ($action === 'add_announcement') {
+            $title = trim($_POST['title'] ?? '');
+            $content = trim($_POST['content'] ?? '');
+            
+            if (empty($title) || empty($content)) {
+                $error = 'Title and content are required';
+            } else {
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO gbs_announcements (gbs_id, author_id, title, content, created_at)
+                        VALUES (?, ?, ?, ?, NOW())
+                    ");
+                    $stmt->execute([$gbs_id, $user_id, $title, $content]);
+                    $message = 'Announcement added successfully!';
+                    
+                    // Refresh announcements
+                    $stmt = $pdo->prepare("
+                        SELECT a.*, u.name as author_name
+                        FROM gbs_announcements a
+                        JOIN users u ON a.author_id = u.id
+                        WHERE a.gbs_id = ?
+                        ORDER BY a.created_at DESC
+                        LIMIT 5
+                    ");
+                    $stmt->execute([$gbs_id]);
+                    $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    
+                } catch (PDOException $e) {
+                    $error = 'Failed to add announcement.';
+                }
             }
         }
     }
@@ -165,8 +153,13 @@ ob_start();
     <div class="col-lg-8">
         <!-- Group Info Card -->
         <div class="card mb-4">
-            <div class="card-header bg-info text-white">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-info-circle"></i> Group Information</h5>
+                <?php if ($can_manage_group): ?>
+                    <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#editGroupModal">
+                        <i class="bi bi-pencil-square"></i> Edit Group Info
+                    </button>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <div class="row align-items-center">
@@ -197,8 +190,13 @@ ob_start();
 
         <!-- Members -->
         <div class="card mb-4">
-            <div class="card-header bg-success text-white">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-people"></i> Members (<?= count($members) ?>)</h5>
+                <?php if ($can_manage_group): ?>
+                    <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                        <i class="bi bi-person-plus"></i> Add Member
+                    </button>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <div class="row g-3">
@@ -222,23 +220,29 @@ ob_start();
                                         <small class="text-muted ms-2">Joined <?= date('M d, Y', strtotime($member['joined_at'])) ?></small>
                                     </div>
                                 </div>
-                                <?php if ($can_manage_group && $member['id'] !== $user_id): ?>
+                                <?php if ($can_manage_group && (int)$member['id'] !== $user_id): ?>
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
                                             <i class="bi bi-three-dots"></i>
                                         </button>
                                         <ul class="dropdown-menu">
                                             <li>
-                                                <a class="dropdown-item" href="#" onclick="startPrivateChat(<?= $member['id'] ?>, '<?= escape($member['name']) ?>')">
+                                                <a class="dropdown-item" href="#" onclick="startPrivateChat(<?= (int)$member['id'] ?>, '<?= escape($member['name']) ?>')">
                                                     <i class="bi bi-chat"></i> Direct Chat
                                                 </a>
                                             </li>
-                                            <?php if ($member['role'] === 'member'): ?>
+                                            <?php if ($member['role'] === 'member' && (int)$member['id'] !== (int)$membership['leader_id']): ?>
                                                 <li><hr class="dropdown-divider"></li>
                                                 <li>
-                                                    <a class="dropdown-item text-danger" href="#" onclick="removeMember(<?= $member['id'] ?>)">
-                                                        <i class="bi bi-person-x"></i> Remove Member
-                                                    </a>
+                                                    <form method="post" action="gbs_manage.php" onsubmit="return confirm('Are you sure you want to remove this member from the group?');" class="m-0">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="remove_member">
+                                                        <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
+                                                        <input type="hidden" name="user_id" value="<?= (int)$member['id'] ?>">
+                                                        <button type="submit" class="dropdown-item text-danger">
+                                                            <i class="bi bi-person-x"></i> Remove Member
+                                                        </button>
+                                                    </form>
                                                 </li>
                                             <?php endif; ?>
                                         </ul>
@@ -268,7 +272,7 @@ ob_start();
                     <p class="text-muted text-center">No resources uploaded yet.</p>
                 <?php else: ?>
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table table-sm align-middle">
                             <thead>
                                 <tr>
                                     <th>Name</th>
@@ -286,9 +290,22 @@ ob_start();
                                         <td><?= escape($resource['uploader_name']) ?></td>
                                         <td><?= date('M d, Y', strtotime($resource['uploaded_at'])) ?></td>
                                         <td>
-                                            <a href="<?= BASE_PATH ?>/modules/helpers/download_helper.php?file=<?= urlencode($resource['file_path']) ?>&name=<?= urlencode($resource['title']) ?>" class="btn btn-sm btn-outline-primary">
-                                                <i class="bi bi-download"></i> Download
-                                            </a>
+                                            <div class="d-flex gap-1">
+                                                <a href="<?= BASE_PATH ?>/modules/helpers/download_helper.php?file=<?= urlencode($resource['file_path']) ?>&name=<?= urlencode($resource['title']) ?>" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-download"></i> Download
+                                                </a>
+                                                <?php if ($can_manage_group): ?>
+                                                    <form method="post" action="gbs_manage.php" onsubmit="return confirm('Delete this resource?');" class="d-inline">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="action" value="delete_resource">
+                                                        <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
+                                                        <input type="hidden" name="resource_id" value="<?= (int)$resource['id'] ?>">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Resource">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -340,9 +357,9 @@ ob_start();
                         <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addMemberModal">
                             <i class="bi bi-person-plus"></i> Add Member
                         </button>
-                        <a href="gbs_manage.php?id=<?= $gbs_id ?>" class="btn btn-outline-secondary btn-sm">
-                            <i class="bi bi-gear"></i> Manage Group
-                        </a>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">
+                            <i class="bi bi-gear"></i> Update Group Info
+                        </button>
                         <form method="post" action="gbs_manage.php" class="d-inline">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="toggle_chat_restriction">
@@ -438,40 +455,76 @@ ob_start();
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Member</h5>
+                <h5 class="modal-title"><i class="bi bi-person-plus"></i> Add Bible Study Member</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="post" action="gbs_manage.php">
                 <?= csrf_field() ?>
                 <div class="modal-body">
-                    <input type="hidden" name="action" value="remove_member">
+                    <input type="hidden" name="action" value="add_member">
                     <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
                     <div class="mb-3">
-                        <label class="form-label">Select User</label>
-                        <select name="user_id" class="form-select" required>
+                        <label class="form-label" for="memberSearchInput">Search Member</label>
+                        <input type="text" id="memberSearchInput" class="form-control" placeholder="Type name, email or campus to filter..." autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="memberSelect">Select Registered Member</label>
+                        <select name="user_id" id="memberSelect" class="form-select" required>
                             <option value="">Choose a user to add</option>
                             <?php
-                            // Get users not in this group
-                            $stmt = $pdo->prepare("
-                                SELECT u.id, u.name, u.email
-                                FROM users u
-                                WHERE u.id NOT IN (
-                                    SELECT gm.user_id FROM gbs_members gm WHERE gm.gbs_id = ?
-                                )
-                                ORDER BY u.name ASC
-                            ");
-                            $stmt->execute([$gbs_id]);
-                            $available_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                            $available_users = getEligibleGbsUsersNotInGroup($pdo, $gbs_id);
                             foreach ($available_users as $user):
+                                $campusLabel = !empty($user['campus']) ? ' - ' . $user['campus'] : '';
                             ?>
-                                <option value="<?= $user['id'] ?>"><?= escape($user['name']) ?> (<?= escape(maskEmail($user['email'] ?? '')) ?>)</option>
+                                <option value="<?= (int)$user['id'] ?>">
+                                    <?= escape($user['name']) ?> (<?= escape(maskEmail($user['email'] ?? '')) ?>)<?= escape($campusLabel) ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if (empty($available_users)): ?>
+                            <div class="form-text text-muted mt-1">All eligible registered members are already in this group.</div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Member</button>
+                    <button type="submit" class="btn btn-primary" <?= empty($available_users) ? 'disabled' : '' ?>>Add Member</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Group Info Modal -->
+<div class="modal fade" id="editGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Update Group Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="gbs_manage.php" enctype="multipart/form-data">
+                <?= csrf_field() ?>
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="update_group">
+                    <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
+                    <div class="mb-3">
+                        <label class="form-label">Group Name <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" value="<?= escape($membership['name']) ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Group Slogan (Optional)</label>
+                        <input type="text" name="slogan" class="form-control" value="<?= escape($membership['slogan'] ?? '') ?>" placeholder="A verse or short motto">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Group Image (Optional)</label>
+                        <input type="file" name="pfp" class="form-control" accept="image/jpeg,image/png,image/webp">
+                        <div class="form-text">Leave blank to keep the current group image.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
                 </div>
             </form>
         </div>
@@ -489,7 +542,7 @@ ob_start();
             <form method="post" action="gbs_manage.php" enctype="multipart/form-data">
                 <?= csrf_field() ?>
                 <div class="modal-body">
-                    <input type="hidden" name="action" value="add_resource">
+                    <input type="hidden" name="action" value="upload_resource">
                     <input type="hidden" name="gbs_id" value="<?= $gbs_id ?>">
                     <div class="mb-3">
                         <label class="form-label">Resource Title</label>
@@ -497,7 +550,7 @@ ob_start();
                     </div>
                     <div class="mb-3">
                         <label class="form-label">File</label>
-                        <input type="file" name="resource_file" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mp3" required>
+                        <input type="file" name="resource_file" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.mp4,.mp3" required>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -513,10 +566,24 @@ ob_start();
 <script>
 const gbsId = <?= $gbs_id ?>;
 const meId = <?= $user_id ?>;
+const csrfToken = <?= json_encode(csrf_token()) ?>;
 let lastMsgId = 0;
 const chatBox = document.getElementById('groupChatBox');
 const chatForm = document.getElementById('groupChatForm');
 const chatInput = document.getElementById('groupChatInput');
+const memberSearchInput = document.getElementById('memberSearchInput');
+const memberSelect = document.getElementById('memberSelect');
+
+if (memberSearchInput && memberSelect) {
+    memberSearchInput.addEventListener('input', () => {
+        const term = memberSearchInput.value.trim().toLowerCase();
+        Array.from(memberSelect.options).forEach((opt, idx) => {
+            if (idx === 0) return;
+            const match = opt.textContent.toLowerCase().includes(term);
+            opt.hidden = !match;
+        });
+    });
+}
 
 async function fetchMessages() {
     try {
@@ -592,6 +659,7 @@ if (chatForm) {
             fd.append('action', 'send');
             fd.append('gbs_id', gbsId);
             fd.append('message', msg);
+            fd.append('csrf_token', csrfToken);
             
             const res = await fetch('modules/gbs/gbs_chat_api.php', {
                 method: 'POST',
@@ -619,7 +687,7 @@ function removeMember(userId) {
         const form = document.createElement('form');
         form.method = 'post';
         form.action = 'gbs_manage.php';
-        const inputs = { action: 'remove_member', user_id: userId, gbs_id: gbsId };
+        const inputs = { action: 'remove_member', user_id: userId, gbs_id: gbsId, csrf_token: csrfToken };
         for (const [k, v] of Object.entries(inputs)) {
             const inp = document.createElement('input');
             inp.type = 'hidden';

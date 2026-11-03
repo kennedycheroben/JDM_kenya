@@ -157,6 +157,15 @@ if (isset($_POST['run_migration'])) {
         $messages[] = 'Note: idx_users_staff index (may already exist): ' . $e->getMessage();
     }
 
+    try {
+        require_once __DIR__ . '/core/gbs_groups.php';
+        reconcileGbsLeaders($pdo, true);
+        $messages[] = 'Reconciled GBS leadership appointments across users, leaders, and gbs_members.';
+    } catch (Throwable $e) {
+        $messages[] = 'GBS leadership reconciliation error: ' . $e->getMessage();
+        $success = false;
+    }
+
     $messages[] = $success ? 'Migration completed successfully.' : 'Migration completed with errors.';
 }
 ?>

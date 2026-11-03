@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__FILE__) . '/../../core/db_connect.php';
+require_once dirname(__FILE__) . '/../../core/gbs_groups.php';
 require_once dirname(__FILE__) . '/../../vendor/autoload.php';
 
 if (isset($_SESSION['user_role'])) {
@@ -79,7 +80,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['user_name'] = $user['name'];
                     $_SESSION['user_role'] = $user['role'];
-                    $_SESSION['is_gbs_leader'] = $user['is_gbs_leader'] ?? 0;
+                    $_SESSION['is_gbs_leader'] = isUserGbsLeader($pdo, (int)$user['id']) ? 1 : 0;
 
                     $pendingAuthorizationUrl = \Jdm\OAuth\Support\PendingAuthorization::consumeUrl(BASE_PATH);
                     if ($pendingAuthorizationUrl !== null) {

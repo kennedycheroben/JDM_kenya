@@ -56,7 +56,7 @@ $mimeType = getMimeType($fileExtension);
 // Security: Check file extension
 $allowedExtensions = [
     'jpg', 'jpeg', 'png', 'gif', 'webp',  // Images
-    'pdf', 'doc', 'docx', 'txt',         // Documents
+    'pdf', 'doc', 'docx', 'ppt', 'pptx', 'txt', // Documents & Presentations
     'mp4', 'avi', 'mov', 'wmv',         // Videos
     'mp3', 'wav', 'ogg',                // Audio
     'zip', 'rar', '7z'                  // Archives
@@ -96,6 +96,8 @@ function getMimeType($extension) {
         'pdf' => 'application/pdf',
         'doc' => 'application/msword',
         'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'ppt' => 'application/vnd.ms-powerpoint',
+        'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         'txt' => 'text/plain',
         'mp4' => 'video/mp4',
         'avi' => 'video/x-msvideo',
